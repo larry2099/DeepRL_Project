@@ -116,29 +116,9 @@ class GeometryDashEnv(gym.Env):
     def close(self) -> None:
         self._game.close()
 
-
-# ------------------------------------------------------------------------------
-# Factory for vectorized environments
-# ------------------------------------------------------------------------------
-
-
-def make_geometry_dash_env(
-    env_id: int,
-    display_base: int = 99,
-    stream_port_base: int = 8080,
-    **env_kwargs,
-) -> GeometryDashEnv:
-    """Create a GeometryDashEnv with a unique display and stream port."""
-    return GeometryDashEnv(
-        display=f":{display_base + env_id}",
-        stream_port=stream_port_base + env_id,
-        **env_kwargs,
-    )
-
-
-# ------------------------------------------------------------------------------
-# Internals
-# ------------------------------------------------------------------
+    # ------------------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
 
     def _get_obs(self) -> np.ndarray:
         if self._game.last_frame is None:
@@ -170,3 +150,22 @@ def make_geometry_dash_env(
             if not state.is_dead:
                 return
         raise RuntimeError("Timed out waiting for level restart after death")
+
+
+# ------------------------------------------------------------------------------
+# Factory for vectorized environments
+# ------------------------------------------------------------------------------
+
+
+def make_geometry_dash_env(
+    env_id: int,
+    display_base: int = 99,
+    stream_port_base: int = 8080,
+    **env_kwargs,
+) -> GeometryDashEnv:
+    """Create a GeometryDashEnv with a unique display and stream port."""
+    return GeometryDashEnv(
+        display=f":{display_base + env_id}",
+        stream_port=stream_port_base + env_id,
+        **env_kwargs,
+    )
