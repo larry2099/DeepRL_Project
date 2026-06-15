@@ -33,18 +33,21 @@ def main():
     vec_env = SubprocVecEnv(env_fns)
     vec_env.seed(args.seed)
 
-    model = PPO(
-        "CnnPolicy",
-        vec_env,
-        verbose=1,
-        device=args.device,
-        tensorboard_log="./tensorboard/",
-    )
+    try:
+        model = PPO(
+            "CnnPolicy",
+            vec_env,
+            verbose=1,
+            device=args.device,
+            tensorboard_log="./tensorboard/",
+        )
 
-    model.learn(total_timesteps=args.total_timesteps)
-    model.save("ppo_geometry_dash")
-
-    vec_env.close()
+        model.learn(total_timesteps=args.total_timesteps)
+        model.save("ppo_geometry_dash")
+    except Exception as e:
+        print("Error: ", e)
+    finally:
+        vec_env.close()
 
 
 if __name__ == "__main__":

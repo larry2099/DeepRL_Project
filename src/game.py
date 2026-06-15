@@ -139,8 +139,9 @@ class LinuxGame:
         logger.info("creating the harness")
         self.harness = harness.get_harness(self.display)
         logger.info("obtaining the window")
-        self.window = self.harness.find_window(config.WINDOW_TITLE)
-        assert self.window is not None
+        self.window = self._wait_for_window(timeout=30.0)
+        if self.window is None:
+            raise RuntimeError(f"could not find window '{config.WINDOW_TITLE}' on {self.display}")
 
         if self.vision is None:
             logger.info("creating default vision module")
@@ -194,6 +195,15 @@ class LinuxGame:
 
     def interact(self, key="space"):
         self.events.append(Event("interact", key))
+
+    def _wait_for_window(self, timeout: float = 30.0, interval: float = 0.5):
+        deadline = time.perf_counter() + timeout
+        while time.perf_counter() < deadline:
+            window = self.harness.find_window(config.WINDOW_TITLE)
+            if window is not None:
+                return window
+            time.sleep(interval)
+        return None
 
     def is_alive(self) -> bool:
         return self.game_proc is not None and self.game_proc.poll() is None
