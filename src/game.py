@@ -4,17 +4,19 @@ import os
 import signal
 import config
 import harness
+from vision import Vision, VisionState
 
 import logging
 logger = logging.getLogger(__name__)
 
 class LinuxGame:
-    def __init__(self):
+    def __init__(self, vision: Vision | None = None):
         logger.info("creating LinuxGame")
         self.wm_proc = None
         self.game_proc = None
         self.xvfb_proc = None
         self.events = []
+        self.vision = vision
 
     def open(self):
         logger.info("starting XVFB")
@@ -56,9 +58,20 @@ class LinuxGame:
         logger.info("obtaining the window")
         self.window = self.harness.find_window(config.WINDOW_TITLE)
         assert(self.window is not None)
+
+        if self.vision is None:
+            logger.info("creating default vision module")
+            self.vision = Vision("filters/death.png", exact_position=True)
+
         logger.info("welcome!")
 
     def update(self):
+        frame = self.harness.capture(self.window)
+        state: VisionState = self.vision.update(frame)
+
+        if state.just_died:
+            logger.info("[vision] died!")
+
         for evt in self.events:
             if evt == "jump":
                 self.harness.send_key(self.window, "up")
