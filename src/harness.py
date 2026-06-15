@@ -51,6 +51,7 @@ import config
 # Base interface
 # ---------------------------------------------------------------------------
 
+
 class GameHarness(ABC):
     """Abstract harness. Concrete implementations are OS-specific below."""
 
@@ -106,6 +107,7 @@ class GameHarness(ABC):
 # ---------------------------------------------------------------------------
 # Windows implementation
 # ---------------------------------------------------------------------------
+
 
 class WindowsHarness(GameHarness):
     def __init__(self) -> None:
@@ -229,6 +231,7 @@ class WindowsHarness(GameHarness):
 # Linux / X11 implementation
 # ---------------------------------------------------------------------------
 
+
 class LinuxHarness(GameHarness):
     _KEY_HOLD_DURATION = config.INPUT_DURATION
 
@@ -316,7 +319,11 @@ class LinuxHarness(GameHarness):
         from Xlib import X
 
         keycode = self._display.keysym_to_keycode(self._resolve_keysym(key))
-        handle.send_event(self._xevent(handle, keycode, True), propagate=False, event_mask=X.KeyPressMask)
+        handle.send_event(
+            self._xevent(handle, keycode, True),
+            propagate=False,
+            event_mask=X.KeyPressMask,
+        )
         self._display.sync()
 
     def release_key(self, handle: Any, key: Union[str, int]) -> None:
@@ -324,7 +331,11 @@ class LinuxHarness(GameHarness):
         from Xlib import X
 
         keycode = self._display.keysym_to_keycode(self._resolve_keysym(key))
-        handle.send_event(self._xevent(handle, keycode, False), propagate=False, event_mask=X.KeyReleaseMask)
+        handle.send_event(
+            self._xevent(handle, keycode, False),
+            propagate=False,
+            event_mask=X.KeyReleaseMask,
+        )
         self._display.sync()
 
     # ------------------------------------------------------------------
@@ -351,6 +362,7 @@ class LinuxHarness(GameHarness):
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
+
 
 def get_harness(display: Optional[str] = None) -> GameHarness:
     """Return an OS-specific harness instance.

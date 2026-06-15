@@ -115,9 +115,7 @@ class Vision:
         return score >= self.death_threshold
 
     @staticmethod
-    def _masked_ncc(
-        frame: np.ndarray, template: np.ndarray, mask: np.ndarray
-    ) -> float:
+    def _masked_ncc(frame: np.ndarray, template: np.ndarray, mask: np.ndarray) -> float:
         """Normalized cross-correlation over the masked pixels.
 
         Equivalent to the score ``cv2.matchTemplate`` would return at the
@@ -137,7 +135,7 @@ class Vision:
         t_centered = t - t_mean
 
         num = np.sum(f_centered * t_centered)
-        den = np.sqrt(np.sum(f_centered ** 2) * np.sum(t_centered ** 2))
+        den = np.sqrt(np.sum(f_centered**2) * np.sum(t_centered**2))
 
         if den < 1e-9:
             return 0.0
