@@ -1,7 +1,11 @@
-import subprocess
-import time
+import glob as _glob
 import os
 import signal
+import subprocess
+import time
+
+import cv2
+
 import config
 import harness
 from vision import Vision, VisionState
@@ -17,9 +21,36 @@ class Event:
         self.body = body
 
 
+def _find_free_display(start: int = 99) -> int:
+    """Return the first display number >= start with no existing X11 socket."""
+    existing = {
+        int(os.path.basename(p)[1:])
+        for p in _glob.glob("/tmp/.X11-unix/X*")
+        if os.path.basename(p)[1:].isdigit()
+    }
+    display = start
+    while display in existing:
+        display += 1
+    return display
+
+
 class LinuxGame:
-    def __init__(self, vision: Vision | None = None):
+    def __init__(
+        self,
+        vision: Vision | None = None,
+        display: str | None = None,
+        stream_port: int | None = None,
+    ):
         logger.info("creating LinuxGame")
+
+        if display is None:
+            display = f":{_find_free_display()}"
+        if not display.startswith(":"):
+            display = f":{display}"
+
+        self.display = display
+        self.stream_port = stream_port if stream_port is not None else config.FFMPEG_PORT
+
         self.wm_proc = None
         self.game_proc = None
         self.xvfb_proc = None
@@ -30,12 +61,18 @@ class LinuxGame:
         self.last_frame = None
         self.last_state: VisionState | None = None
 
+        # Watchdog state
+        self._last_frame_hash: float | None = None
+        self._last_frame_change_time = time.perf_counter()
+        self._last_alive_time = time.perf_counter()
+        self._death_start_time: float | None = None
+
     def open(self):
-        logger.info("starting XVFB")
+        logger.info(f"starting XVFB on {self.display}")
         self.xvfb_proc = subprocess.Popen(
             [
                 "Xvfb",
-                ":99",
+                self.display,
                 "-screen",
                 "0",
                 "800x600x24",
@@ -49,7 +86,7 @@ class LinuxGame:
             start_new_session=True,
         )
         time.sleep(1)
-        os.environ["DISPLAY"] = ":99"
+        os.environ["DISPLAY"] = self.display
 
         logger.info("starting fluxbox")
         self.wm_proc = subprocess.Popen(
@@ -61,7 +98,7 @@ class LinuxGame:
         )
         time.sleep(2)
 
-        logger.info("starting ffmpeg stream")
+        logger.info(f"starting ffmpeg stream on port {self.stream_port}")
         self.ffmpeg_proc = subprocess.Popen(
             [
                 "ffmpeg",
@@ -72,7 +109,7 @@ class LinuxGame:
                 "-s",
                 "800:600",
                 "-i",
-                ":99.0",
+                f"{self.display}.0",
                 "-c:v",
                 "libx264",
                 "-preset",
@@ -81,7 +118,7 @@ class LinuxGame:
                 "zerolatency",
                 "-f",
                 "mpegts",
-                f"tcp://0.0.0.0:{config.FFMPEG_PORT}?listen",
+                f"tcp://0.0.0.0:{self.stream_port}?listen",
             ],
             env=os.environ,
             stdout=subprocess.DEVNULL,
@@ -100,7 +137,7 @@ class LinuxGame:
         time.sleep(5)
 
         logger.info("creating the harness")
-        self.harness = harness.get_harness(":99")
+        self.harness = harness.get_harness(self.display)
         logger.info("obtaining the window")
         self.window = self.harness.find_window(config.WINDOW_TITLE)
         assert self.window is not None
@@ -109,15 +146,31 @@ class LinuxGame:
             logger.info("creating default vision module")
             self.vision = Vision("filters/death.png", exact_position=True)
 
+        self._last_alive_time = time.perf_counter()
+        self._death_start_time = None
         logger.info("welcome!")
 
     def update(self) -> VisionState:
         self.last_frame = self.harness.capture(self.window)
         self.last_state = self.vision.update(self.last_frame)
 
-        if self.last_state.just_died:
+        now = time.perf_counter()
+
+        # Frame-change watchdog
+        frame_hash = float(cv2.mean(self.last_frame)[0])
+        if self._last_frame_hash != frame_hash:
+            self._last_frame_hash = frame_hash
+            self._last_frame_change_time = now
+
+        # Alive/death watchdog
+        if self.last_state.is_dead:
+            if self._death_start_time is None:
+                self._death_start_time = now
             logger.info("died!")
             self.interact()
+        else:
+            self._death_start_time = None
+            self._last_alive_time = now
 
         for evt in self.events:
             if evt.kind == "hold_jump":
@@ -141,6 +194,22 @@ class LinuxGame:
 
     def interact(self, key="space"):
         self.events.append(Event("interact", key))
+
+    def is_alive(self) -> bool:
+        return self.game_proc is not None and self.game_proc.poll() is None
+
+    def is_stuck(self, frame_timeout: float = 5.0, death_timeout: float = 30.0) -> bool:
+        now = time.perf_counter()
+        if now - self._last_frame_change_time > frame_timeout:
+            return True
+        if self._death_start_time is not None and now - self._death_start_time > death_timeout:
+            return True
+        return False
+
+    def hard_restart(self) -> None:
+        logger.warning("hard restart triggered")
+        self.close()
+        self.open()
 
     def close(self):
         logger.info("LinuxGame cleanup")
@@ -166,5 +235,10 @@ class LinuxGame:
                     pass
             except ProcessLookupError:
                 pass
+
+        self.wm_proc = None
+        self.game_proc = None
+        self.xvfb_proc = None
+        self.ffmpeg_proc = None
 
         logger.info("good bye!")

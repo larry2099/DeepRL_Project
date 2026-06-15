@@ -32,6 +32,8 @@ class GeometryDashEnv(gym.Env):
         grayscale: bool = True,
         max_episode_steps: int = 2000,
         death_restart_timeout: float = 10.0,
+        display: Optional[str] = None,
+        stream_port: Optional[int] = None,
     ) -> None:
         super().__init__()
 
@@ -41,7 +43,7 @@ class GeometryDashEnv(gym.Env):
         self.max_episode_steps = max_episode_steps
         self.death_restart_timeout = death_restart_timeout
 
-        self._game = game.LinuxGame()
+        self._game = game.LinuxGame(display=display, stream_port=stream_port)
 
         self._prev_action = 0
         self._elapsed_steps = 0
