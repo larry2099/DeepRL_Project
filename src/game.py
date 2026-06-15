@@ -59,6 +59,35 @@ class LinuxGame:
         )
         time.sleep(2)
 
+        logger.info("starting ffmpeg stream")
+        self.ffmpeg_proc = subprocess.Popen(
+            [
+                "ffmpeg",
+                "-f",
+                "x11grab",
+                "-r",
+                "15",
+                "-s",
+                "800:600",
+                "-i",
+                ":99.0",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-tune",
+                "zerolatency",
+                "-f",
+                "mpegts",
+                f"tcp://0.0.0.0:{config.FFMPEG_PORT}?listen",
+            ],
+            env=os.environ,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        time.sleep(2)
+
         logger.info("starting the game")
         self.game_proc = subprocess.Popen(
             [config.GAME_SCRIPT, config.GAME_PATH],
@@ -114,7 +143,7 @@ class LinuxGame:
         logger.info("LinuxGame cleanup")
 
         logger.info("closing the processes")
-        for proc in (self.game_proc, self.wm_proc, self.xvfb_proc):
+        for proc in (self.game_proc, self.wm_proc, self.xvfb_proc, self.ffmpeg_proc):
             if proc is None:
                 continue
             try:
@@ -122,7 +151,7 @@ class LinuxGame:
             except ProcessLookupError:
                 pass  # already gone
 
-        for proc in (self.game_proc, self.wm_proc, self.xvfb_proc):
+        for proc in (self.game_proc, self.wm_proc, self.xvfb_proc, self.ffmpeg_proc):
             if proc is None:
                 continue
             try:
