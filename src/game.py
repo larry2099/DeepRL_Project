@@ -1,6 +1,7 @@
 import subprocess
 import time
 import os
+import signal
 import config
 import harness
 
@@ -13,6 +14,7 @@ class LinuxGame:
         self.wm_proc = None
         self.game_proc = None
         self.xvfb_proc = None
+        self.events = []
 
     def open(self):
         logger.info("starting XVFB")
@@ -26,6 +28,7 @@ class LinuxGame:
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            start_new_session=True,
         )
         time.sleep(1)
         os.environ["DISPLAY"] = ":99"
@@ -36,6 +39,7 @@ class LinuxGame:
             env=os.environ,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            start_new_session=True,
         )
         time.sleep(2)
 
@@ -43,6 +47,7 @@ class LinuxGame:
         self.game_proc = subprocess.Popen(
             [config.GAME_SCRIPT, config.GAME_PATH],
             env=os.environ,
+            start_new_session=True,
         )
         time.sleep(5)
 
@@ -53,12 +58,45 @@ class LinuxGame:
         assert(self.window is not None)
         logger.info("welcome!")
 
+    def update(self):
+        for evt in self.events:
+            if evt == "jump":
+                self.harness.send_key(self.window, "up")
+                time.sleep(config.INPUT_FREQUENCY)
+            elif evt == "interact":
+                self.harness.send_key(self.window, "space")
+                time.sleep(1)
+        self.events = []
+
+    def jump(self):
+        self.events.append("jump")
+
+    def interact(self):
+        self.events.append("interact")
+
     def close(self):
         logger.info("LinuxGame cleanup")
 
         logger.info("closing the processes")
-        if self.game_proc is not None: self.game_proc.terminate()
-        if self.wm_proc is not None: self.wm_proc.terminate()
-        if self.xvfb_proc is not None: self.xvfb_proc.terminate()
+        for proc in (self.game_proc, self.wm_proc, self.xvfb_proc):
+            if proc is None:
+                continue
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except ProcessLookupError:
+                pass  # already gone
+
+        for proc in (self.game_proc, self.wm_proc, self.xvfb_proc):
+            if proc is None:
+                continue
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+            except ProcessLookupError:
+                pass
 
         logger.info("good bye!")

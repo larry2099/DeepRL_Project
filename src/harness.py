@@ -44,6 +44,7 @@ from typing import Any, Dict, Optional, Union
 
 import numpy as np
 from mss import mss
+import config
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +301,7 @@ class LinuxHarness(GameHarness):
 
         handle.send_event(_event(True), propagate=False, event_mask=X.KeyPressMask)
         self._display.sync()
-        time.sleep(0.05)
+        time.sleep(config.INPUT_DURATION)
         handle.send_event(_event(False), propagate=False, event_mask=X.KeyReleaseMask)
         self._display.sync()
 

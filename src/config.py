@@ -8,3 +8,6 @@ WINDOW_TITLE = "Geometry Dash"
 PWD = os.getcwd()
 GAME_SCRIPT = PWD + "/game.sh"
 
+INPUT_DURATION = 0.05
+INPUT_FREQUENCY = 0.1
+
