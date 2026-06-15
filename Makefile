@@ -1,6 +1,6 @@
 .PHONY: run
 run:
-	python main.py
+	python src/main.py
 
 .PHONY: record
 record:
