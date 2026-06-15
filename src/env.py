@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any, Dict, Optional, Tuple
 
 import cv2
@@ -48,6 +49,14 @@ class GeometryDashEnv(gym.Env):
         self._prev_action = 0
         self._elapsed_steps = 0
 
+        # Metrics exposed to SB3 callbacks
+        self._episode_reward = 0.0
+        self._episode_length = 0
+        self._episode_count = 0
+        self._death_count = 0
+        self._last_step_duration: float | None = None
+        self._last_step_start: float | None = None
+
         self.action_space = spaces.Discrete(2)  # 0 = release/no-op, 1 = hold jump
 
         h, w = obs_size
@@ -69,6 +78,9 @@ class GeometryDashEnv(gym.Env):
         super().reset(seed=seed)
         self._elapsed_steps = 0
         self._prev_action = 0
+        self._episode_reward = 0.0
+        self._episode_length = 0
+        self._last_step_duration = None
 
         if self._game.game_proc is None:
             self._game.open()
@@ -97,7 +109,9 @@ class GeometryDashEnv(gym.Env):
             self._game.release_jump()
         self._prev_action = action
 
+        self._last_step_start = time.perf_counter()
         state = self._game.update()
+        self._last_step_duration = time.perf_counter() - self._last_step_start
         self._elapsed_steps += 1
 
         obs = self._get_obs()
@@ -105,6 +119,19 @@ class GeometryDashEnv(gym.Env):
         terminated = state.is_dead
         truncated = self._elapsed_steps >= self.max_episode_steps
         info = self._get_info(state)
+
+        self._episode_reward += reward
+        self._episode_length += 1
+
+        if terminated:
+            self._death_count += 1
+            self._episode_count += 1
+            self._episode_reward = 0.0
+            self._episode_length = 0
+        elif truncated:
+            self._episode_count += 1
+            self._episode_reward = 0.0
+            self._episode_length = 0
 
         return obs, reward, terminated, truncated, info
 

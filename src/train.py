@@ -3,8 +3,11 @@
 import argparse
 
 from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import CallbackList
+from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
+from callbacks import TensorBoardCallback
 from env import make_geometry_dash_env
 
 
@@ -23,10 +26,12 @@ def main():
     args = parse_args()
 
     env_fns = [
-        lambda rank=i: make_geometry_dash_env(
-            env_id=rank,
-            display_base=args.display_base,
-            stream_port_base=args.stream_port_base,
+        lambda rank=i: Monitor(
+            make_geometry_dash_env(
+                env_id=rank,
+                display_base=args.display_base,
+                stream_port_base=args.stream_port_base,
+            )
         )
         for i in range(args.n_envs)
     ]
@@ -42,7 +47,8 @@ def main():
             tensorboard_log="./tensorboard/",
         )
 
-        model.learn(total_timesteps=args.total_timesteps)
+        callbacks = CallbackList([TensorBoardCallback(log_interval=1000)])
+        model.learn(total_timesteps=args.total_timesteps, callback=callbacks)
         model.save("ppo_geometry_dash")
     except Exception as e:
         print("Error: ", e)
