@@ -64,10 +64,23 @@ class GameHarness(ABC):
         """Return ``{"left": x, "top": y, "width": w, "height": h}``."""
         raise NotImplementedError
 
+    _KEY_HOLD_DURATION = 0.05
+
     @abstractmethod
-    def send_key(self, handle: Any, key: Union[str, int]) -> None:
-        """Send *key* directly to the window (no focus change)."""
+    def press_key(self, handle: Any, key: Union[str, int]) -> None:
+        """Send a key-press event directly to the window."""
         raise NotImplementedError
+
+    @abstractmethod
+    def release_key(self, handle: Any, key: Union[str, int]) -> None:
+        """Send a key-release event directly to the window."""
+        raise NotImplementedError
+
+    def send_key(self, handle: Any, key: Union[str, int]) -> None:
+        """Press and release *key* directly to the window (no focus change)."""
+        self.press_key(handle, key)
+        time.sleep(self._KEY_HOLD_DURATION)
+        self.release_key(handle, key)
 
     @abstractmethod
     def send_key_focused(self, handle: Any, key: Union[str, int]) -> None:
@@ -179,17 +192,19 @@ class WindowsHarness(GameHarness):
 
     # ------------------------------------------------------------------
 
-    def send_key(self, handle: int, key: Union[str, int]) -> None:
-        """PostMessage WM_KEYDOWN / WM_KEYUP directly to *handle*."""
+    def press_key(self, handle: int, key: Union[str, int]) -> None:
+        """PostMessage WM_KEYDOWN directly to *handle*."""
         vk_code = self._resolve_vk(key)
         scan_code = self._win32api.MapVirtualKey(vk_code, 0)
+        lparam = (scan_code << 16) | 1
+        self._win32api.PostMessage(handle, self._win32con.WM_KEYDOWN, vk_code, lparam)
 
-        lparam_down = (scan_code << 16) | 1
-        lparam_up = lparam_down | (1 << 30) | (1 << 31)
-
-        self._win32api.PostMessage(handle, self._win32con.WM_KEYDOWN, vk_code, lparam_down)
-        time.sleep(0.05)
-        self._win32api.PostMessage(handle, self._win32con.WM_KEYUP, vk_code, lparam_up)
+    def release_key(self, handle: int, key: Union[str, int]) -> None:
+        """PostMessage WM_KEYUP directly to *handle*."""
+        vk_code = self._resolve_vk(key)
+        scan_code = self._win32api.MapVirtualKey(vk_code, 0)
+        lparam = ((scan_code << 16) | 1) | (1 << 30) | (1 << 31)
+        self._win32api.PostMessage(handle, self._win32con.WM_KEYUP, vk_code, lparam)
 
     # ------------------------------------------------------------------
 
@@ -215,6 +230,8 @@ class WindowsHarness(GameHarness):
 # ---------------------------------------------------------------------------
 
 class LinuxHarness(GameHarness):
+    _KEY_HOLD_DURATION = config.INPUT_DURATION
+
     def __init__(self, display: Optional[str] = None) -> None:
         import Xlib.display
         import Xlib.XK
@@ -275,34 +292,39 @@ class LinuxHarness(GameHarness):
 
     # ------------------------------------------------------------------
 
-    def send_key(self, handle: Any, key: Union[str, int]) -> None:
-        """Send KeyPress / KeyRelease directly via XSendEvent."""
+    def _xevent(self, handle: Any, keycode: int, pressed: bool):
         from Xlib import X
         from Xlib.protocol.event import KeyPress, KeyRelease
 
-        keysym = self._resolve_keysym(key)
-        keycode = self._display.keysym_to_keycode(keysym)
+        cls = KeyPress if pressed else KeyRelease
+        return cls(
+            time=X.CurrentTime,
+            root=self._root,
+            window=handle,
+            same_screen=1,
+            child=X.NONE,
+            root_x=0,
+            root_y=0,
+            event_x=0,
+            event_y=0,
+            state=0,
+            detail=keycode,
+        )
 
-        def _event(pressed: bool):
-            cls = KeyPress if pressed else KeyRelease
-            return cls(
-                time=X.CurrentTime,
-                root=self._root,
-                window=handle,
-                same_screen=1,
-                child=X.NONE,
-                root_x=0,
-                root_y=0,
-                event_x=0,
-                event_y=0,
-                state=0,
-                detail=keycode,
-            )
+    def press_key(self, handle: Any, key: Union[str, int]) -> None:
+        """Send KeyPress directly via XSendEvent."""
+        from Xlib import X
 
-        handle.send_event(_event(True), propagate=False, event_mask=X.KeyPressMask)
+        keycode = self._display.keysym_to_keycode(self._resolve_keysym(key))
+        handle.send_event(self._xevent(handle, keycode, True), propagate=False, event_mask=X.KeyPressMask)
         self._display.sync()
-        time.sleep(config.INPUT_DURATION)
-        handle.send_event(_event(False), propagate=False, event_mask=X.KeyReleaseMask)
+
+    def release_key(self, handle: Any, key: Union[str, int]) -> None:
+        """Send KeyRelease directly via XSendEvent."""
+        from Xlib import X
+
+        keycode = self._display.keysym_to_keycode(self._resolve_keysym(key))
+        handle.send_event(self._xevent(handle, keycode, False), propagate=False, event_mask=X.KeyReleaseMask)
         self._display.sync()
 
     # ------------------------------------------------------------------

@@ -71,18 +71,25 @@ class LinuxGame:
 
         if state.just_died:
             logger.info("[vision] died!")
+            self.interact()
 
         for evt in self.events:
-            if evt == "jump":
-                self.harness.send_key(self.window, "up")
+            if evt == "hold_jump":
+                self.harness.press_key(self.window, "up")
+                time.sleep(config.INPUT_FREQUENCY)
+            elif evt == "release_jump":
+                self.harness.release_key(self.window, "up")
                 time.sleep(config.INPUT_FREQUENCY)
             elif evt == "interact":
                 self.harness.send_key(self.window, "space")
                 time.sleep(1)
         self.events = []
 
-    def jump(self):
-        self.events.append("jump")
+    def hold_jump(self):
+        self.events.append("hold_jump")
+
+    def release_jump(self):
+        self.events.append("release_jump")
 
     def interact(self):
         self.events.append("interact")

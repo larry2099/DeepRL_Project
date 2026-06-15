@@ -1,3 +1,4 @@
+from numpy import random
 import game
 import logging
 import signal
@@ -11,12 +12,9 @@ def on_sigint(sig, frame):
 
     global g
     while True:
-        s = input("choose action: [i]: interact [j]: jump [q]: quit: ")
+        s = input("choose action: [i]: interact [q]: quit: ")
         if s == "i":
             g.interact()
-            return
-        elif s == "j":
-            g.jump()
             return
         elif s == "q":
             raise Exception("exit")
@@ -29,7 +27,12 @@ try:
     g.interact()
 
     while True:
-        g.jump()
+        action = random.rand()
+        if action < 0.1:
+            g.hold_jump()
+        elif action > 0.9:
+            g.release_jump()
+
         g.update()
 
 except Exception as e:
