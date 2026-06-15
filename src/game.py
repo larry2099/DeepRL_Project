@@ -23,6 +23,8 @@ class LinuxGame:
         self.wm_proc = None
         self.game_proc = None
         self.xvfb_proc = None
+        self.ffmpeg_proc = None
+
         self.events = []
         self.vision = vision
         self.last_frame = None
@@ -84,6 +86,7 @@ class LinuxGame:
             env=os.environ,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
             start_new_session=True,
         )
         time.sleep(2)

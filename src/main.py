@@ -2,6 +2,7 @@
 
 import logging
 import signal
+import traceback
 
 from env import GeometryDashEnv
 
@@ -17,15 +18,9 @@ def on_sigint(sig, frame):
 
     global g
     while True:
-        s = input("choose action: [i]: interact [j]: jump [r]: release [q]: quit: ")
+        s = input("choose action: [i]: interact [q]: quit: ")
         if s == "i":
             g.interact()
-            return
-        elif s == "j":
-            g.hold_jump()
-            return
-        elif s == "r":
-            g.release_jump()
             return
         elif s == "q":
             raise Exception("exit")
