@@ -5,8 +5,8 @@
 # It sets up a separate Proton prefix for each executable to avoid conflicts.
 # Usage: proton <path-to-executable>
 
-if [ "$#" -ne 1 ]; then
-    echo "Usage: $0 <executable-path>"
+if [ "$#" -lt 1 ]; then
+    echo "Usage: $0 <executable-path> [proton-path-suffix]"
     exit 1
 fi
 
@@ -18,11 +18,16 @@ PROTON_VER="Proton - Experimental"
 STEAM_ROOT="$HOME/.steam/root" # expects: steamapps/common/$PROTON_VER/proton
 GAME_ROOT="$(dirname "$1")"
 GAME="$(basename "$1")"
+PROTON_PATH="$PROTON_ROOT/$GAME"
+if [ "$#" -eq 2 ]; then
+    PROTON_PATH="$PROTON_ROOT/$GAME-$2"
+    cp -r "$PROTON_ROOT/$GAME" $PROTON_PATH
+fi
 
 cd "$GAME_ROOT" || exit
 
-mkdir -p "$PROTON_ROOT/$GAME"
-export STEAM_COMPAT_DATA_PATH="$PROTON_ROOT/$GAME"
+mkdir -p $PROTON_PATH
+export STEAM_COMPAT_DATA_PATH=$PROTON_PATH
 export STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_ROOT"
 
 "$STEAM_ROOT/steamapps/common/$PROTON_VER/proton" run "$1" >/dev/null 2>&1

@@ -43,13 +43,10 @@ class LinuxGame:
     ):
         logger.info("creating LinuxGame")
 
-        if display is None:
-            display = f":{_find_free_display()}"
-        if not display.startswith(":"):
-            display = f":{display}"
-
         self.display = display
-        self.stream_port = stream_port if stream_port is not None else config.FFMPEG_PORT
+        self.stream_port = (
+            stream_port if stream_port is not None else config.FFMPEG_PORT
+        )
 
         self.wm_proc = None
         self.game_proc = None
@@ -68,6 +65,9 @@ class LinuxGame:
         self._death_start_time: float | None = None
 
     def open(self):
+        if self.display is None:
+            self.display = f":{_find_free_display()}"
+
         logger.info(f"starting XVFB on {self.display}")
         self.xvfb_proc = subprocess.Popen(
             [
@@ -130,7 +130,7 @@ class LinuxGame:
 
         logger.info("starting the game")
         self.game_proc = subprocess.Popen(
-            [config.GAME_SCRIPT, config.GAME_PATH],
+            [config.GAME_SCRIPT, config.GAME_PATH, self.display],
             env=os.environ,
             start_new_session=True,
         )
@@ -139,9 +139,11 @@ class LinuxGame:
         logger.info("creating the harness")
         self.harness = harness.get_harness(self.display)
         logger.info("obtaining the window")
-        self.window = self._wait_for_window(timeout=30.0)
+        self.window = self.harness.find_window(config.WINDOW_TITLE)
         if self.window is None:
-            raise RuntimeError(f"could not find window '{config.WINDOW_TITLE}' on {self.display}")
+            raise RuntimeError(
+                f"could not find window '{config.WINDOW_TITLE}' on {self.display}"
+            )
 
         if self.vision is None:
             logger.info("creating default vision module")
@@ -196,15 +198,6 @@ class LinuxGame:
     def interact(self, key="space"):
         self.events.append(Event("interact", key))
 
-    def _wait_for_window(self, timeout: float = 30.0, interval: float = 0.5):
-        deadline = time.perf_counter() + timeout
-        while time.perf_counter() < deadline:
-            window = self.harness.find_window(config.WINDOW_TITLE)
-            if window is not None:
-                return window
-            time.sleep(interval)
-        return None
-
     def is_alive(self) -> bool:
         return self.game_proc is not None and self.game_proc.poll() is None
 
@@ -212,7 +205,10 @@ class LinuxGame:
         now = time.perf_counter()
         if now - self._last_frame_change_time > frame_timeout:
             return True
-        if self._death_start_time is not None and now - self._death_start_time > death_timeout:
+        if (
+            self._death_start_time is not None
+            and now - self._death_start_time > death_timeout
+        ):
             return True
         return False
 
