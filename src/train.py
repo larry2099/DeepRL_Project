@@ -38,21 +38,21 @@ def main():
     vec_env = SubprocVecEnv(env_fns)
     vec_env.seed(args.seed)
 
-    try:
-        model = PPO(
-            "CnnPolicy",
-            vec_env,
-            verbose=1,
-            device=args.device,
-            tensorboard_log="./tensorboard/",
-        )
+    model = PPO(
+        "CnnPolicy",
+        vec_env,
+        verbose=1,
+        device=args.device,
+        tensorboard_log="./tensorboard/",
+    )
 
+    try:
         callbacks = CallbackList([TensorBoardCallback(log_interval=1000)])
         model.learn(total_timesteps=args.total_timesteps, callback=callbacks)
-        model.save("ppo_geometry_dash")
-    except Exception as e:
-        print("Error: ", e)
+    except (Exception, KeyboardInterrupt, SystemExit) as e:
+        print("ERROR: caught exception", e)
     finally:
+        model.save("ppo_geometry_dash")
         vec_env.close()
 
 

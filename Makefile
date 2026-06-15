@@ -1,6 +1,6 @@
 .PHONY: train
 train:
-	python src/train.py --n-envs 4 --total-timesteps 100
+	python src/train.py --n-envs 1 --total-timesteps 10000
 
 .PHONY: run
 run:
