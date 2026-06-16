@@ -117,8 +117,14 @@ class BestRunRecorder:
             return
 
         best = max(self._heap)
-        # obs shape: (T, H, W, C) uint8 -> (1, T, C, H, W) float32 [0,1]
-        video = np.expand_dims(best.obs.transpose(0, 3, 1, 2), axis=0).astype(np.float32) / 255.0
+        # Pick the most recent frame channel for human-friendly video.
+        # obs shape: (T, H, W, C) uint8 -> (T, H, W, 1)
+        if best.obs.shape[-1] == 1:
+            video_frames = best.obs
+        else:
+            video_frames = best.obs[..., -1:]
+        # -> (1, T, C, H, W) float32 [0,1]
+        video = np.expand_dims(video_frames.transpose(0, 3, 1, 2), axis=0).astype(np.float32) / 255.0
         self._writer.add_video("best_run/video", video, global_step, fps=10)
 
     def save_to_disk(self, global_step: int) -> None:

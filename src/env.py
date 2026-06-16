@@ -31,6 +31,7 @@ class GeometryDashEnv(gym.Env):
         render_mode: Optional[str] = None,
         obs_size: Tuple[int, int] = (120, 160),
         grayscale: bool = True,
+        frame_stack: int = 4,
         max_episode_steps: int = 2000,
         death_restart_timeout: float = 10.0,
         display: Optional[str] = None,
@@ -41,6 +42,7 @@ class GeometryDashEnv(gym.Env):
         self.render_mode = render_mode
         self.obs_size = obs_size
         self.grayscale = grayscale
+        self.frame_stack = frame_stack if grayscale else 1
         self.max_episode_steps = max_episode_steps
         self.death_restart_timeout = death_restart_timeout
 
@@ -58,10 +60,15 @@ class GeometryDashEnv(gym.Env):
         self._last_step_duration: float | None = None
         self._last_step_start: float | None = None
 
+        # Frame stacking buffer
+        h, w = obs_size
+        self._frame_buffer = np.zeros(
+            (h, w, self.frame_stack), dtype=np.uint8
+        )
+
         self.action_space = spaces.Discrete(2)  # 0 = release/no-op, 1 = hold jump
 
-        h, w = obs_size
-        channels = 1 if grayscale else 3
+        channels = self.frame_stack if grayscale else 3
         self.observation_space = spaces.Box(
             low=0,
             high=255,
@@ -83,6 +90,7 @@ class GeometryDashEnv(gym.Env):
         self._episode_reward = 0.0
         self._episode_length = 0
         self._last_step_duration = None
+        self._frame_buffer.fill(0)
 
         if self._game.game_proc is None:
             self._game.open()
@@ -176,18 +184,22 @@ class GeometryDashEnv(gym.Env):
 
     def _get_obs(self) -> np.ndarray:
         if self._game.last_frame is None:
-            h, w = self.obs_size
-            channels = 1 if self.grayscale else 3
-            return np.zeros((h, w, channels), dtype=np.uint8)
+            return self._frame_buffer.copy()
 
         frame = self._game.last_frame
         if self.grayscale:
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
             resized = cv2.resize(frame, (self.obs_size[1], self.obs_size[0]))
-            return resized[..., np.newaxis]
+            new_frame = resized[..., np.newaxis]
         else:
             resized = cv2.resize(frame, (self.obs_size[1], self.obs_size[0]))
             return cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+
+        # Roll buffer and append newest frame.
+        self._frame_buffer = np.concatenate(
+            [self._frame_buffer[..., 1:], new_frame], axis=-1
+        )
+        return self._frame_buffer.copy()
 
     def _get_info(self, state: game.VisionState) -> Dict[str, Any]:
         return {

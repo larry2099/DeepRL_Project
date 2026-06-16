@@ -30,6 +30,7 @@ def parse_args():
     parser.add_argument("--total-timesteps", type=int, default=1_000_000)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--frame-stack", type=int, default=4)
     return parser.parse_args()
 
 
@@ -111,6 +112,7 @@ def main():
                 env_id=rank,
                 display_base=args.display_base,
                 stream_port_base=args.stream_port_base,
+                frame_stack=args.frame_stack,
             )
         )
         for i in range(args.n_envs)
