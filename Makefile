@@ -1,6 +1,6 @@
 .PHONY: train
 train:
-	python src/train.py --n-envs 1 
+	python src/train.py --n-envs 2 
 
 .PHONY: run
 run:

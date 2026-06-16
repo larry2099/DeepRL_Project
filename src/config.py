@@ -11,3 +11,5 @@ GAME_SCRIPT = PWD + "/game.sh"
 INPUT_DURATION = 0.05
 INPUT_FREQUENCY = 0.05
 FFMPEG_PORT = 8080
+
+FONT_FILE = "/usr/share/fonts/adwaita-mono-fonts/AdwaitaMono-Regular.ttf"

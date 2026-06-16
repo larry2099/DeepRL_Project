@@ -47,7 +47,7 @@ class LinuxGame:
         self.stream_port = (
             stream_port if stream_port is not None else config.FFMPEG_PORT
         )
-        self.overlay_path = f"/tmp/gdash_overlay_{self.display.lstrip(':')}.txt"
+        self.overlay_path = None
 
         self.wm_proc = None
         self.game_proc = None
@@ -68,6 +68,7 @@ class LinuxGame:
     def open(self):
         if self.display is None:
             self.display = f":{_find_free_display()}"
+        self.overlay_path = f"/tmp/gdash_overlay_{self.display.lstrip(':')}.txt"
 
         logger.info(f"starting XVFB on {self.display}")
         self.xvfb_proc = subprocess.Popen(
@@ -117,9 +118,9 @@ class LinuxGame:
                 f"{self.display}.0",
                 "-vf",
                 (
-                    "drawtext=textfile="
-                    + self.overlay_path
-                    + ":reload=1:x=10:y=10:fontsize=24:fontcolor=white:box=1:boxcolor=black@0.5"
+                    f"[in] drawtext=textfile={self.overlay_path}"
+                    f":reload=1:x=10:y=10:fontfile={config.FONT_FILE}"
+                    ":fontsize=24:fontcolor=white:box=1:boxcolor=black@0.5 [out]"
                 ),
                 "-c:v",
                 "libx264",

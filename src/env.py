@@ -62,9 +62,7 @@ class GeometryDashEnv(gym.Env):
 
         # Frame stacking buffer
         h, w = obs_size
-        self._frame_buffer = np.zeros(
-            (h, w, self.frame_stack), dtype=np.uint8
-        )
+        self._frame_buffer = np.zeros((h, w, self.frame_stack), dtype=np.uint8)
 
         self.action_space = spaces.Discrete(2)  # 0 = release/no-op, 1 = hold jump
 
@@ -209,12 +207,12 @@ class GeometryDashEnv(gym.Env):
 
     def _write_overlay(self, action: int, state: game.VisionState) -> None:
         try:
-            action_str = "JUMP" if action == 1 else "NO-OP"
+            action_str = "JUMP" if action == 1 else "NOOP"
             dead_str = "DEAD" if state.is_dead else "ALIVE"
             text = (
-                f"ACTION: {action_str}\\n"
-                f"STEPS: {self._elapsed_steps}\\n"
-                f"REWARD: {self._episode_reward:.1f}\\n"
+                f"ACTION: {action_str}\n"
+                f"STEPS: {self._elapsed_steps}\n"
+                f"REWARD: {self._episode_reward:.1f}\n"
                 f"{dead_str}"
             )
             with open(self._game.overlay_path, "w") as f:
