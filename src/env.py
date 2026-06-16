@@ -150,6 +150,26 @@ class GeometryDashEnv(gym.Env):
     def close(self) -> None:
         self._game.close()
 
+    # ------------------------------------------------------------------
+    # Manual control helpers used by the SIGINT menu
+    # ------------------------------------------------------------------
+
+    def hold_jump(self) -> None:
+        self._game.hold_jump()
+
+    def release_jump(self) -> None:
+        self._game.release_jump()
+
+    def interact(self, key: str = "space", delay: float = 1.0) -> None:
+        self._game.interact(key=key, delay=delay)
+
+    def hard_restart_game(self) -> None:
+        self._game.hard_restart()
+
+    @property
+    def best_run_length(self) -> int:
+        return self._episode_length
+
     # ------------------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
@@ -213,6 +233,11 @@ def make_geometry_dash_env(
     **env_kwargs,
 ) -> GeometryDashEnv:
     """Create a GeometryDashEnv with a unique display and stream port."""
+    # SubprocVecEnv workers must not react to the main-process Ctrl+C menu.
+    import signal
+
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
     return GeometryDashEnv(
         display=f":{display_base + env_id}",
         stream_port=stream_port_base + env_id,

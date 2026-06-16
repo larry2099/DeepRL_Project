@@ -198,3 +198,21 @@ class BestRunRecorderCallback(BaseCallback):
         if self.num_timesteps % self.save_interval == 0:
             self.recorder.save_to_disk(self.num_timesteps)
         return True
+
+
+class PauseCallback(BaseCallback):
+    """Honor a global pause/stop request from the SIGINT menu."""
+
+    def __init__(self, pause_event, stop_event, verbose: int = 0):
+        super().__init__(verbose)
+        self.pause_event = pause_event
+        self.stop_event = stop_event
+
+    def _on_step(self) -> bool:
+        if self.stop_event.is_set():
+            return False
+        while self.pause_event.is_set() and not self.stop_event.is_set():
+            import time
+
+            time.sleep(0.1)
+        return True
