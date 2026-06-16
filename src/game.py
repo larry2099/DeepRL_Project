@@ -170,7 +170,7 @@ class LinuxGame:
             if self._death_start_time is None:
                 self._death_start_time = now
             logger.info("died!")
-            self.interact()
+            self.interact(delay=config.INPUT_FREQUENCY)
         else:
             self._death_start_time = None
             self._last_alive_time = now
@@ -186,9 +186,11 @@ class LinuxGame:
                 time.sleep(config.INPUT_FREQUENCY)
                 sleep_amt -= config.INPUT_FREQUENCY
             elif evt.kind == "interact":
-                self.harness.send_key(self.window, evt.body)
-                time.sleep(1)
-                sleep_amt -= 1
+                key = evt.body["key"]
+                delay = evt.body["delay"]
+                self.harness.send_key(self.window, key)
+                time.sleep(delay)
+                sleep_amt -= delay
         self.events = []
 
         if sleep_amt > 0:
@@ -202,8 +204,8 @@ class LinuxGame:
     def release_jump(self):
         self.events.append(Event("release_jump"))
 
-    def interact(self, key="space"):
-        self.events.append(Event("interact", key))
+    def interact(self, key="space", delay=1.0):
+        self.events.append(Event("interact", {"key": key, "delay": delay}))
 
     def is_alive(self) -> bool:
         return self.game_proc is not None and self.game_proc.poll() is None
