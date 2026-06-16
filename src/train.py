@@ -7,7 +7,12 @@ from stable_baselines3.common.callbacks import CallbackList
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
-from callbacks import TensorBoardCallback
+from callbacks import (
+    BestRunRecorder,
+    BestRunRecorderCallback,
+    RecordBestRunsWrapper,
+    TensorBoardCallback,
+)
 from env import make_geometry_dash_env
 
 
@@ -38,6 +43,9 @@ def main():
     vec_env = SubprocVecEnv(env_fns)
     vec_env.seed(args.seed)
 
+    recorder = BestRunRecorder(logdir="./tensorboard/", save_dir="./best_runs/", top_k=10)
+    vec_env = RecordBestRunsWrapper(vec_env, recorder)
+
     model = PPO(
         "CnnPolicy",
         vec_env,
@@ -47,7 +55,12 @@ def main():
     )
 
     try:
-        callbacks = CallbackList([TensorBoardCallback(log_interval=1000)])
+        callbacks = CallbackList(
+            [
+                TensorBoardCallback(log_interval=1000),
+                BestRunRecorderCallback(recorder, log_interval=10_000, save_interval=50_000),
+            ]
+        )
         model.learn(total_timesteps=args.total_timesteps, callback=callbacks)
     except (Exception, KeyboardInterrupt, SystemExit) as e:
         print("ERROR: caught exception", e)
