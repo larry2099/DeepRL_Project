@@ -1,10 +1,10 @@
+.PHONY: debug
+debug:
+	python src/debug.py
+
 .PHONY: train
 train:
-	python src/train.py --n-envs 2 
-
-.PHONY: run
-run:
-	python src/main.py
+	python src/train.py --n-envs 3 
 
 .PHONY: record
 record:
@@ -21,3 +21,4 @@ clean:
 	rm -rf *.mp4
 	rm -rf *.png
 	rm -rf best_runs/
+	rm -rf checkpoints/

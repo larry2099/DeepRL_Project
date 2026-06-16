@@ -6,7 +6,7 @@ import threading
 import traceback
 
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import CallbackList
+from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
@@ -32,6 +32,7 @@ def parse_args():
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--frame-stack", type=int, default=4)
+    parser.add_argument("--checkpoint", type=str, default=None)
     return parser.parse_args()
 
 
@@ -129,22 +130,34 @@ def main():
 
     signal.signal(signal.SIGINT, make_sigint_handler(vec_env, recorder))
 
-    model = PPO(
-        "CnnPolicy",
-        vec_env,
-        verbose=1,
-        device=args.device,
-        tensorboard_log="./tensorboard/",
-    )
+    if args.checkpoint is None:
+        model = PPO(
+            "CnnPolicy",
+            vec_env,
+            verbose=1,
+            device=args.device,
+            tensorboard_log="./tensorboard/",
+        )
+    else:
+        model = PPO.load(args.checkpoint, vec_env)
 
     try:
         callbacks = CallbackList(
             [
-                TensorBoardCallback(log_interval=1000),
+                TensorBoardCallback(log_interval=model.n_steps),
                 BestRunRecorderCallback(
-                    recorder, log_interval=1000, save_interval=1000
+                    recorder,
+                    log_interval=model.n_steps,
+                    save_interval=model.n_steps,
                 ),
                 PauseCallback(pause_event, stop_event),
+                CheckpointCallback(
+                    save_freq=model.n_steps,
+                    save_path="checkpoints",
+                    name_prefix="gd",
+                    save_replay_buffer=True,
+                    save_vecnormalize=True,
+                ),
             ]
         )
         model.learn(total_timesteps=args.total_timesteps, callback=callbacks)
