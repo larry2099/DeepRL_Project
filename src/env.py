@@ -115,7 +115,8 @@ class GeometryDashEnv(gym.Env):
         self._elapsed_steps += 1
 
         obs = self._get_obs()
-        reward = 1.0 if not state.is_dead else 0.0
+        reward = 1.0 if not state.is_dead else -100.0
+        reward -= 0 if action == 0 else 0.2
         terminated = state.is_dead
         truncated = self._elapsed_steps >= self.max_episode_steps
         info = self._get_info(state)

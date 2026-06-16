@@ -175,17 +175,24 @@ class LinuxGame:
             self._death_start_time = None
             self._last_alive_time = now
 
+        sleep_amt = config.INPUT_FREQUENCY
         for evt in self.events:
             if evt.kind == "hold_jump":
                 self.harness.press_key(self.window, "up")
                 time.sleep(config.INPUT_FREQUENCY)
+                sleep_amt -= config.INPUT_FREQUENCY
             elif evt.kind == "release_jump":
                 self.harness.release_key(self.window, "up")
                 time.sleep(config.INPUT_FREQUENCY)
+                sleep_amt -= config.INPUT_FREQUENCY
             elif evt.kind == "interact":
                 self.harness.send_key(self.window, evt.body)
                 time.sleep(1)
+                sleep_amt -= 1
         self.events = []
+
+        if sleep_amt > 0:
+            time.sleep(sleep_amt)
 
         return self.last_state
 
