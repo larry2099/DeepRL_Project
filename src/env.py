@@ -124,6 +124,8 @@ class GeometryDashEnv(gym.Env):
         self._episode_reward += reward
         self._episode_length += 1
 
+        self._write_overlay(action, state)
+
         if terminated:
             self._death_count += 1
             self._episode_count += 1
@@ -168,6 +170,21 @@ class GeometryDashEnv(gym.Env):
             "steps": self._elapsed_steps,
             "is_dead": state.is_dead,
         }
+
+    def _write_overlay(self, action: int, state: game.VisionState) -> None:
+        try:
+            action_str = "JUMP" if action == 1 else "NO-OP"
+            dead_str = "DEAD" if state.is_dead else "ALIVE"
+            text = (
+                f"ACTION: {action_str}\\n"
+                f"STEPS: {self._elapsed_steps}\\n"
+                f"REWARD: {self._episode_reward:.1f}\\n"
+                f"{dead_str}"
+            )
+            with open(self._game.overlay_path, "w") as f:
+                f.write(text)
+        except Exception:
+            pass
 
     def _wait_until_alive(self) -> None:
         import time as _time

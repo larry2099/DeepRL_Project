@@ -47,6 +47,7 @@ class LinuxGame:
         self.stream_port = (
             stream_port if stream_port is not None else config.FFMPEG_PORT
         )
+        self.overlay_path = f"/tmp/gdash_overlay_{self.display.lstrip(':')}.txt"
 
         self.wm_proc = None
         self.game_proc = None
@@ -99,6 +100,10 @@ class LinuxGame:
         time.sleep(2)
 
         logger.info(f"starting ffmpeg stream on port {self.stream_port}")
+        # Ensure overlay file exists so drawtext can open it.
+        with open(self.overlay_path, "w") as f:
+            f.write("starting...")
+
         self.ffmpeg_proc = subprocess.Popen(
             [
                 "ffmpeg",
@@ -110,6 +115,12 @@ class LinuxGame:
                 "800:600",
                 "-i",
                 f"{self.display}.0",
+                "-vf",
+                (
+                    "drawtext=textfile="
+                    + self.overlay_path
+                    + ":reload=1:x=10:y=10:fontsize=24:fontcolor=white:box=1:boxcolor=black@0.5"
+                ),
                 "-c:v",
                 "libx264",
                 "-preset",
