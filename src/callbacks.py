@@ -36,6 +36,8 @@ class TensorBoardCallback(BaseCallback):
             episode_counts = self.training_env.get_attr("_episode_count")
             death_counts = self.training_env.get_attr("_death_count")
             step_durations = self.training_env.get_attr("_last_step_duration")
+            elapsed_steps = self.training_env.get_attr("_elapsed_steps")
+            action_counts = self.training_env.get_attr("_action_count")
         except Exception:
             return {}
 
@@ -51,8 +53,15 @@ class TensorBoardCallback(BaseCallback):
         if step_durations:
             durations = [d for d in step_durations if d is not None]
             if durations:
-                metrics["gdash/mean_step_duration_ms"] = float(np.mean(durations)) * 1000
+                mean_dur = float(np.mean(durations))
+                metrics["gdash/mean_step_duration_ms"] = mean_dur * 1000
                 metrics["gdash/max_step_duration_ms"] = float(np.max(durations)) * 1000
+                metrics["gdash/mean_env_fps"] = 1.0 / mean_dur if mean_dur > 0 else 0.0
+        if elapsed_steps and action_counts:
+            total_steps = sum(elapsed_steps)
+            total_actions = sum(action_counts)
+            if total_steps > 0:
+                metrics["gdash/action_rate"] = total_actions / total_steps
 
         return metrics
 

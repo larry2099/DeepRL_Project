@@ -48,6 +48,7 @@ class GeometryDashEnv(gym.Env):
 
         self._prev_action = 0
         self._elapsed_steps = 0
+        self._action_count = 0
 
         # Metrics exposed to SB3 callbacks
         self._episode_reward = 0.0
@@ -78,6 +79,7 @@ class GeometryDashEnv(gym.Env):
         super().reset(seed=seed)
         self._elapsed_steps = 0
         self._prev_action = 0
+        self._action_count = 0
         self._episode_reward = 0.0
         self._episode_length = 0
         self._last_step_duration = None
@@ -108,6 +110,8 @@ class GeometryDashEnv(gym.Env):
         elif action == 0 and self._prev_action == 1:
             self._game.release_jump()
         self._prev_action = action
+        if action == 1:
+            self._action_count += 1
 
         self._last_step_start = time.perf_counter()
         state = self._game.update()
