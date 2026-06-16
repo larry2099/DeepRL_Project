@@ -101,7 +101,9 @@ class BestRunRecorder:
         except Exception:
             self._writer = None
 
-    def maybe_add(self, obs: np.ndarray, actions: np.ndarray, rewards: np.ndarray) -> None:
+    def maybe_add(
+        self, obs: np.ndarray, actions: np.ndarray, rewards: np.ndarray
+    ) -> None:
         """Add an episode if it is in the top-K by length."""
         length = len(actions)
         self._total_seen += 1
@@ -124,13 +126,23 @@ class BestRunRecorder:
         else:
             video_frames = best.obs[..., -1:]
         # -> (1, T, C, H, W) float32 [0,1]
-        video = np.expand_dims(video_frames.transpose(0, 3, 1, 2), axis=0).astype(np.float32) / 255.0
+        video = (
+            np.expand_dims(video_frames.transpose(0, 3, 1, 2), axis=0).astype(
+                np.float32
+            )
+            / 255.0
+        )
+        # add_video needs a 3-channel video
+        video = np.repeat(video, 3, axis=2)
         self._writer.add_video("best_run/video", video, global_step, fps=10)
 
     def save_to_disk(self, global_step: int) -> None:
         """Persist the top-K episodes to disk as .npz files."""
         for rank, ep in enumerate(sorted(self._heap, reverse=True), start=1):
-            path = os.path.join(self.save_dir, f"best_run_step{global_step}_rank{rank}_len{ep.length}.npz")
+            path = os.path.join(
+                self.save_dir,
+                f"best_run_step{global_step}_rank{rank}_len{ep.length}.npz",
+            )
             np.savez(
                 path,
                 observations=ep.obs,

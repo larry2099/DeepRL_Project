@@ -13,3 +13,4 @@ INPUT_FREQUENCY = 0.05
 FFMPEG_PORT = 8080
 
 FONT_FILE = "/usr/share/fonts/adwaita-mono-fonts/AdwaitaMono-Regular.ttf"
+FFMPEG_PATH = "/usr/bin/ffmpeg"

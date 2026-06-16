@@ -20,3 +20,4 @@ clean:
 	rm -rf *.zip
 	rm -rf *.mp4
 	rm -rf *.png
+	rm -rf best_runs/

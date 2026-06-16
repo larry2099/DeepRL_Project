@@ -3,6 +3,7 @@
 import argparse
 import signal
 import threading
+import traceback
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CallbackList
@@ -38,6 +39,7 @@ def make_sigint_handler(vec_env, recorder):
     def handler(signum, frame):
         _ = signum
         _ = frame
+        traceback.print_stack()
 
         while True:
             print(
@@ -120,7 +122,9 @@ def main():
     vec_env = SubprocVecEnv(env_fns)
     vec_env.seed(args.seed)
 
-    recorder = BestRunRecorder(logdir="./tensorboard/", save_dir="./best_runs/", top_k=10)
+    recorder = BestRunRecorder(
+        logdir="./tensorboard/", save_dir="./best_runs/", top_k=10
+    )
     vec_env = RecordBestRunsWrapper(vec_env, recorder)
 
     signal.signal(signal.SIGINT, make_sigint_handler(vec_env, recorder))
@@ -137,12 +141,15 @@ def main():
         callbacks = CallbackList(
             [
                 TensorBoardCallback(log_interval=1000),
-                BestRunRecorderCallback(recorder, log_interval=10_000, save_interval=50_000),
+                BestRunRecorderCallback(
+                    recorder, log_interval=1000, save_interval=1000
+                ),
                 PauseCallback(pause_event, stop_event),
             ]
         )
         model.learn(total_timesteps=args.total_timesteps, callback=callbacks)
     except (Exception, KeyboardInterrupt, SystemExit) as e:
+        traceback.print_exception(e)
         print("ERROR: caught exception", e)
     finally:
         model.save("ppo_geometry_dash")

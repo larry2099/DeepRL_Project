@@ -68,7 +68,11 @@ class LinuxGame:
     def open(self):
         if self.display is None:
             self.display = f":{_find_free_display()}"
-        self.overlay_path = f"/tmp/gdash_overlay_{self.display.lstrip(':')}.txt"
+        index = self.display.lstrip(":")
+        self.overlay_path = f"/tmp/gdash_overlay_{index}.txt"
+        self.log_path = f"/tmp/gdash_log_{index}.txt"
+        self.log_file = open(self.log_path, "w")
+        self.log_file.write("LOG_BEING")
 
         logger.info(f"starting XVFB on {self.display}")
         self.xvfb_proc = subprocess.Popen(
@@ -107,7 +111,10 @@ class LinuxGame:
 
         self.ffmpeg_proc = subprocess.Popen(
             [
-                "ffmpeg",
+                config.FFMPEG_PATH,
+                "-hide_banner",
+                "-loglevel",
+                "info",
                 "-f",
                 "x11grab",
                 "-r",
@@ -116,12 +123,12 @@ class LinuxGame:
                 "800:600",
                 "-i",
                 f"{self.display}.0",
-                "-vf",
-                (
-                    f"[in] drawtext=textfile={self.overlay_path}"
-                    f":reload=1:x=10:y=10:fontfile={config.FONT_FILE}"
-                    ":fontsize=24:fontcolor=white:box=1:boxcolor=black@0.5 [out]"
-                ),
+                # "-vf",
+                # (
+                #     f"drawtext=textfile={self.overlay_path}"
+                #     f":reload=1:x=10:y=10:fontfile={config.FONT_FILE}"
+                #     ":fontsize=24:fontcolor=white:box=1:boxcolor=black@0.5"
+                # ),
                 "-c:v",
                 "libx264",
                 "-preset",
@@ -133,8 +140,8 @@ class LinuxGame:
                 f"tcp://0.0.0.0:{self.stream_port}?listen",
             ],
             env=os.environ,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=self.log_file,
+            stderr=self.log_file,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
         )
@@ -240,6 +247,7 @@ class LinuxGame:
 
     def close(self):
         logger.info("LinuxGame cleanup")
+        self.log_file.close()
 
         logger.info("closing the processes")
         for proc in (self.game_proc, self.wm_proc, self.xvfb_proc, self.ffmpeg_proc):
