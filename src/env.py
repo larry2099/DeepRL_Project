@@ -156,6 +156,9 @@ class GeometryDashEnv(gym.Env):
     def close(self) -> None:
         self._game.close()
 
+    def restart(self):
+        self._game.restart()
+
     # ------------------------------------------------------------------
     # Manual control helpers used by the SIGINT menu
     # ------------------------------------------------------------------

@@ -74,16 +74,16 @@ class LinuxGame:
         GAME_ROOT = os.path.dirname(config.GAME_PATH)
         GAME = os.path.basename(config.GAME_PATH)
 
-        PROTON_PATH_GOLDEN = PROTON_ROOT + "/" + GAME
-        assert os.path.exists(PROTON_PATH_GOLDEN)
-        PROTON_PATH = PROTON_PATH_GOLDEN + "-" + self.display
-        os.system(f"cp -r {PROTON_PATH_GOLDEN} {PROTON_PATH}")
+        WINE_PREFIX_GOLDEN = PROTON_ROOT + "/" + GAME
+        assert os.path.exists(WINE_PREFIX_GOLDEN)
+        self.WINE_PREFIX = WINE_PREFIX_GOLDEN + "-" + self.display
+        os.system(f"cp -r {WINE_PREFIX_GOLDEN} {self.WINE_PREFIX}")
 
         env = os.environ.copy()
-        env["STEAM_COMPAT_DATA_PATH"] = PROTON_PATH
+        env["STEAM_COMPAT_DATA_PATH"] = self.WINE_PREFIX
         env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = STEAM_ROOT
         CC_GAME_MANAGER = (
-            PROTON_PATH
+            self.WINE_PREFIX
             + "/pfx/drive_c/users/steamuser/AppData/Local/GeometryDash/CCGameManager.dat"
         )
 
@@ -114,9 +114,11 @@ class LinuxGame:
         )
         game_data.to_file(CC_GAME_MANAGER)
 
+        self.proton_dir = f"{STEAM_ROOT}/steamapps/common/{PROTON_VER}"
+
         self.game_proc = subprocess.Popen(
             [
-                f"{STEAM_ROOT}/steamapps/common/{PROTON_VER}/proton",
+                self.proton_dir + "/proton",
                 "run",
                 config.GAME_PATH,
             ],
@@ -125,6 +127,7 @@ class LinuxGame:
             stderr=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stdin=subprocess.DEVNULL,
+            start_new_session=True,
         )
 
         self.mouse_move((int(1332 / 1920 * 800), int(501 / 1080 * 600)))
@@ -323,36 +326,45 @@ class LinuxGame:
             return True
         return False
 
-    def hard_restart(self) -> None:
-        logger.warning("hard restart triggered")
-        self.close()
-        self.open()
+    def restart(self) -> None:
+        self.harness.press_key(self.window, "Alt_L")
+        self.harness.press_key(self.window, "F4")
+        self.harness.release_key(self.window, "F4")
+        self.harness.release_key(self.window, "Alt_L")
+
+        self.game_proc = None
+        self.window = None
+        time.sleep(1)
+
+        self.open_game_on_random_level()
+        time.sleep(10)
+        self.window = self.harness.find_window(config.WINDOW_TITLE)
+        assert self.window is not None
+
+    def kill_proc(self, proc):
+        if proc is None:
+            return
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except ProcessLookupError:
+            pass  # already gone
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+        except ProcessLookupError:
+            pass
 
     def close(self):
         logger.info("LinuxGame cleanup")
         self.log_file.close()
 
         logger.info("closing the processes")
-        for proc in (self.wm_proc,):
-            if proc is None:
-                continue
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            except ProcessLookupError:
-                pass  # already gone
-
-        for proc in (self.xvfb_proc,):
-            if proc is None:
-                continue
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                try:
-                    proc.kill()
-                except ProcessLookupError:
-                    pass
-            except ProcessLookupError:
-                pass
+        for proc in [self.ffmpeg_proc, self.game_proc, self.wm_proc, self.xvfb_proc]:
+            self.kill_proc(proc)
 
         self.wm_proc = None
         self.game_proc = None

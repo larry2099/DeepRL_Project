@@ -234,3 +234,18 @@ class PauseCallback(BaseCallback):
 
             time.sleep(0.1)
         return True
+
+
+class RestartCallback(BaseCallback):
+    def __init__(
+        self,
+        interval: int = 10_000,
+        verbose: int = 0,
+    ):
+        super().__init__(verbose)
+        self.interval = interval
+
+    def _on_step(self) -> bool:
+        if self.num_timesteps % self.interval == 0:
+            self.training_env.env_method("restart")
+        return True

@@ -15,6 +15,7 @@ from callbacks import (
     BestRunRecorderCallback,
     PauseCallback,
     RecordBestRunsWrapper,
+    RestartCallback,
     TensorBoardCallback,
 )
 from env import make_geometry_dash_env
@@ -157,6 +158,9 @@ def main():
                     name_prefix="gd",
                     save_replay_buffer=True,
                     save_vecnormalize=True,
+                ),
+                RestartCallback(
+                    interval=model.n_steps,
                 ),
             ]
         )
