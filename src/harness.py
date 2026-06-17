@@ -40,7 +40,7 @@ import platform
 import re
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 from mss import mss
@@ -82,6 +82,25 @@ class GameHarness(ABC):
         self.press_key(handle, key)
         time.sleep(self._KEY_HOLD_DURATION)
         self.release_key(handle, key)
+
+    @abstractmethod
+    def mouse_down(self, handle: Any, xy: Tuple[int, int], button: int) -> None:
+        """Press *button* at *xy* on the window"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def mouse_up(self, handle: Any, xy: Tuple[int, int], button: int) -> None:
+        """Release *button* at *xy* on the window"""
+        raise NotImplementedError
+
+    def mouse_click(self, handle: Any, xy: Tuple[int, int], button: int) -> None:
+        self.mouse_down(handle, xy, button)
+        time.sleep(self._KEY_HOLD_DURATION)
+        self.mouse_up(handle, xy, button)
+
+    @abstractmethod
+    def mouse_move(self, handle: Any, xy: Tuple[int, int]) -> None:
+        raise NotImplementedError
 
     @abstractmethod
     def send_key_focused(self, handle: Any, key: Union[str, int]) -> None:
@@ -336,6 +355,29 @@ class LinuxHarness(GameHarness):
             propagate=False,
             event_mask=X.KeyReleaseMask,
         )
+        self._display.sync()
+
+    # ------------------------------------------------------------------
+
+    def mouse_down(self, handle: Any, xy: Tuple[int, int], button: int) -> None:
+        from Xlib import X
+        from Xlib.ext.xtest import fake_input
+
+        fake_input(self._display, X.ButtonPress, 1, x=xy[0], y=xy[1])
+        self._display.sync()
+
+    def mouse_up(self, handle: Any, xy: Tuple[int, int], button: int) -> None:
+        from Xlib import X
+        from Xlib.ext.xtest import fake_input
+
+        fake_input(self._display, X.ButtonRelease, 1, x=xy[0], y=xy[1])
+        self._display.sync()
+
+    def mouse_move(self, handle: Any, xy: Tuple[int, int]) -> None:
+        from Xlib import X
+        from Xlib.ext.xtest import fake_input
+
+        fake_input(self._display, X.MotionNotify, x=xy[0], y=xy[1])
         self._display.sync()
 
     # ------------------------------------------------------------------

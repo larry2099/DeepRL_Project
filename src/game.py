@@ -5,10 +5,12 @@ import subprocess
 import time
 
 import cv2
+from numpy import random
 
 import config
 import harness
 from vision import Vision, VisionState
+from gmdkit import GameSave
 
 import logging
 
@@ -64,6 +66,74 @@ class LinuxGame:
         self._last_frame_change_time = time.perf_counter()
         self._last_alive_time = time.perf_counter()
         self._death_start_time: float | None = None
+
+    def open_game_on_random_level(self):
+        PROTON_ROOT = config.HOME + "/.proton"
+        PROTON_VER = "Proton - Experimental"
+        STEAM_ROOT = config.HOME + "/.steam/root"
+        GAME_ROOT = os.path.dirname(config.GAME_PATH)
+        GAME = os.path.basename(config.GAME_PATH)
+
+        PROTON_PATH_GOLDEN = PROTON_ROOT + "/" + GAME
+        assert os.path.exists(PROTON_PATH_GOLDEN)
+        PROTON_PATH = PROTON_PATH_GOLDEN + "-" + self.display
+        os.system(f"cp -r {PROTON_PATH_GOLDEN} {PROTON_PATH}")
+
+        env = os.environ.copy()
+        env["STEAM_COMPAT_DATA_PATH"] = PROTON_PATH
+        env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = STEAM_ROOT
+        CC_GAME_MANAGER = (
+            PROTON_PATH
+            + "/pfx/drive_c/users/steamuser/AppData/Local/GeometryDash/CCGameManager.dat"
+        )
+
+        LEVEL_ORDER = "k83"
+        LEVEL_NAME = "k2"
+        SAVED_LEVELS = "GLM_03"
+        game_data = GameSave.from_file(CC_GAME_MANAGER)
+        levels = game_data[SAVED_LEVELS]
+        level_cnt = len(levels)
+        assert level_cnt != 0
+        first_lvl = random.randint(1, level_cnt)
+        cur = -1
+        tgt = -1
+
+        for lvl in levels:
+            if levels[lvl][LEVEL_ORDER] == level_cnt:
+                cur = lvl
+            if levels[lvl][LEVEL_ORDER] == first_lvl:
+                tgt = lvl
+
+        assert cur != -1
+        assert tgt != -1
+        logger.info(f"playing level '{levels[tgt][LEVEL_NAME]}'")
+
+        levels[cur][LEVEL_ORDER], levels[tgt][LEVEL_ORDER] = (
+            levels[tgt][LEVEL_ORDER],
+            levels[cur][LEVEL_ORDER],
+        )
+        game_data.to_file(CC_GAME_MANAGER)
+
+        self.game_proc = subprocess.Popen(
+            [
+                f"{STEAM_ROOT}/steamapps/common/{PROTON_VER}/proton",
+                "run",
+                config.GAME_PATH,
+            ],
+            env=env,
+            cwd=GAME_ROOT,
+            stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+        )
+
+        self.mouse_move((int(1332 / 1920 * 800), int(501 / 1080 * 600)))
+        self.click((int(1332 / 1920 * 800), int(501 / 1080 * 600)))
+        self.mouse_move((int(657 / 1920 * 800), int(234 / 1080 * 600)))
+        self.click((int(657 / 1920 * 800), int(234 / 1080 * 600)))
+        self.mouse_move((int(1394 / 1920 * 800), int(340 / 1080 * 600)))
+        self.click((int(1394 / 1920 * 800), int(340 / 1080 * 600)))
+        self.interact()
 
     def open(self):
         if self.display is None:
@@ -148,11 +218,7 @@ class LinuxGame:
         time.sleep(2)
 
         logger.info("starting the game")
-        self.game_proc = subprocess.Popen(
-            [config.GAME_SCRIPT, config.GAME_PATH, self.display],
-            env=os.environ,
-            start_new_session=True,
-        )
+        self.open_game_on_random_level()
         time.sleep(5)
 
         logger.info("creating the harness")
@@ -206,10 +272,21 @@ class LinuxGame:
                 sleep_amt -= config.INPUT_FREQUENCY
             elif evt.kind == "interact":
                 key = evt.body["key"]
-                delay = evt.body["delay"]
                 self.harness.send_key(self.window, key)
+                delay = evt.body["delay"]
                 time.sleep(delay)
                 sleep_amt -= delay
+            elif evt.kind == "click":
+                self.harness.mouse_click(self.window, evt.body["xy"], 1)
+                delay = evt.body["delay"]
+                time.sleep(delay)
+                sleep_amt -= delay
+            elif evt.kind == "mouse_move":
+                self.harness.mouse_move(self.window, evt.body["xy"])
+                delay = evt.body["delay"]
+                time.sleep(delay)
+                sleep_amt -= delay
+
         self.events = []
 
         if sleep_amt > 0:
@@ -225,6 +302,12 @@ class LinuxGame:
 
     def interact(self, key="space", delay=1.0):
         self.events.append(Event("interact", {"key": key, "delay": delay}))
+
+    def click(self, xy, delay=1.0):
+        self.events.append(Event("click", {"delay": delay, "xy": xy}))
+
+    def mouse_move(self, xy, delay=1.0):
+        self.events.append(Event("mouse_move", {"delay": delay, "xy": xy}))
 
     def is_alive(self) -> bool:
         return self.game_proc is not None and self.game_proc.poll() is None
@@ -250,7 +333,7 @@ class LinuxGame:
         self.log_file.close()
 
         logger.info("closing the processes")
-        for proc in (self.game_proc, self.wm_proc, self.xvfb_proc, self.ffmpeg_proc):
+        for proc in (self.wm_proc,):
             if proc is None:
                 continue
             try:
@@ -258,7 +341,7 @@ class LinuxGame:
             except ProcessLookupError:
                 pass  # already gone
 
-        for proc in (self.game_proc, self.wm_proc, self.xvfb_proc, self.ffmpeg_proc):
+        for proc in (self.xvfb_proc,):
             if proc is None:
                 continue
             try:

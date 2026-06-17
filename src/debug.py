@@ -11,12 +11,12 @@ import pygame
 class Runner:
     def __init__(self):
         pygame.init()
-        self.screen = pygame.display.set_mode((800, 600))
+        self.screen = pygame.display.set_mode((8 * 100, 6 * 100))
         self.clock = pygame.time.Clock()
         self.running = True
 
         self.env = GeometryDashEnv()
-        self.model = PPO.load("checkpoints/gd_65536_steps.zip", self.env)
+        self.model = PPO.load("checkpoints/gd_98304_steps.zip", self.env)
 
         self.frames = []
         self.obs = None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import time
 from typing import Any, Dict, Optional, Tuple
 
@@ -10,6 +11,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
+import config
 import game
 
 
@@ -29,7 +31,7 @@ class GeometryDashEnv(gym.Env):
     def __init__(
         self,
         render_mode: Optional[str] = None,
-        obs_size: Tuple[int, int] = (120, 160),
+        obs_size: Tuple[int, int] = config.RESOLUTION,
         grayscale: bool = True,
         frame_stack: int = 4,
         max_episode_steps: int = 2000,
@@ -92,8 +94,6 @@ class GeometryDashEnv(gym.Env):
 
         if self._game.game_proc is None:
             self._game.open()
-            self._game.interact()
-            self._game.interact()
 
         # If the player is dead, the next update() will queue interact.
         # Spin until we are alive again (or timeout).
@@ -125,8 +125,8 @@ class GeometryDashEnv(gym.Env):
         self._elapsed_steps += 1
 
         obs = self._get_obs()
-        reward = 1.0 if not state.is_dead else -100.0
-        reward -= 0 if action == 0 else 2
+        reward = 1.0 if not state.is_dead else -config.DEATH_PENALTY
+        reward -= 0 if action == 0 else config.JUMP_PENALTY
         terminated = state.is_dead
         truncated = self._elapsed_steps >= self.max_episode_steps
         info = self._get_info(state)
@@ -179,6 +179,9 @@ class GeometryDashEnv(gym.Env):
     # ------------------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    def _pick_random_level(self):
+        pass
 
     def _get_obs(self) -> np.ndarray:
         if self._game.last_frame is None:
