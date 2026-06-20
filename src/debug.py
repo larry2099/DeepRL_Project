@@ -4,6 +4,7 @@ from env import GeometryDashEnv
 import numpy as np
 import torch
 from stable_baselines3.common import preprocessing
+import sys
 
 import pygame
 
@@ -16,7 +17,7 @@ class Runner:
         self.running = True
 
         self.env = GeometryDashEnv()
-        self.model = PPO.load("checkpoints/gd_98304_steps.zip", self.env)
+        self.model = PPO.load(sys.argv[1], self.env)
 
         self.frames = []
         self.obs = None

@@ -1,6 +1,6 @@
 __pycache__/
 tensorboard/
-ppo_geometry_dash.zip
+*.zip
 best_runs/
 checkpoints/
 

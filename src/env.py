@@ -33,7 +33,7 @@ class GeometryDashEnv(gym.Env):
         render_mode: Optional[str] = None,
         obs_size: Tuple[int, int] = config.RESOLUTION,
         grayscale: bool = True,
-        frame_stack: int = 4,
+        frame_stack: int = 3,
         max_episode_steps: int = 2000,
         death_restart_timeout: float = 10.0,
         display: Optional[str] = None,

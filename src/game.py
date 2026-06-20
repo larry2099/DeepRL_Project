@@ -10,7 +10,7 @@ from numpy import random
 import config
 import harness
 from vision import Vision, VisionState
-from gmdkit import GameSave
+from gmdkit import GameSave, LevelSave
 
 import logging
 
@@ -82,37 +82,15 @@ class LinuxGame:
         env = os.environ.copy()
         env["STEAM_COMPAT_DATA_PATH"] = self.WINE_PREFIX
         env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = STEAM_ROOT
-        CC_GAME_MANAGER = (
+        CC_LOCAL_LEVELS = (
             self.WINE_PREFIX
-            + "/pfx/drive_c/users/steamuser/AppData/Local/GeometryDash/CCGameManager.dat"
+            + "/pfx/drive_c/users/steamuser/AppData/Local/GeometryDash/CCLocalLevels.dat"
         )
 
-        LEVEL_ORDER = "k83"
-        LEVEL_NAME = "k2"
-        SAVED_LEVELS = "GLM_03"
-        game_data = GameSave.from_file(CC_GAME_MANAGER)
-        levels = game_data[SAVED_LEVELS]
-        level_cnt = len(levels)
-        assert level_cnt != 0
-        first_lvl = random.randint(1, level_cnt)
-        cur = -1
-        tgt = -1
-
-        for lvl in levels:
-            if levels[lvl][LEVEL_ORDER] == level_cnt:
-                cur = lvl
-            if levels[lvl][LEVEL_ORDER] == first_lvl:
-                tgt = lvl
-
-        assert cur != -1
-        assert tgt != -1
-        logger.info(f"playing level '{levels[tgt][LEVEL_NAME]}'")
-
-        levels[cur][LEVEL_ORDER], levels[tgt][LEVEL_ORDER] = (
-            levels[tgt][LEVEL_ORDER],
-            levels[cur][LEVEL_ORDER],
-        )
-        game_data.to_file(CC_GAME_MANAGER)
+        level_data = LevelSave.from_file(CC_LOCAL_LEVELS)
+        levels = level_data["LLM_01"]
+        random.shuffle(levels)
+        level_data.to_file(CC_LOCAL_LEVELS)
 
         self.proton_dir = f"{STEAM_ROOT}/steamapps/common/{PROTON_VER}"
 
@@ -130,12 +108,12 @@ class LinuxGame:
             start_new_session=True,
         )
 
-        self.mouse_move((int(1332 / 1920 * 800), int(501 / 1080 * 600)))
-        self.click((int(1332 / 1920 * 800), int(501 / 1080 * 600)))
-        self.mouse_move((int(657 / 1920 * 800), int(234 / 1080 * 600)))
-        self.click((int(657 / 1920 * 800), int(234 / 1080 * 600)))
-        self.mouse_move((int(1394 / 1920 * 800), int(340 / 1080 * 600)))
-        self.click((int(1394 / 1920 * 800), int(340 / 1080 * 600)))
+        ratio_x = 800 / 1920
+        ratio_y = 600 / 1080
+        for x, y in [(1332, 501), (353, 222), (1445, 302)]:
+            self.mouse_move((int(x * ratio_x), int(y * ratio_y)))
+            self.click((int(x * ratio_x), int(y * ratio_y)))
+
         self.interact()
 
     def open(self):
@@ -337,7 +315,7 @@ class LinuxGame:
         time.sleep(1)
 
         self.open_game_on_random_level()
-        time.sleep(10)
+        time.sleep(5)
         self.window = self.harness.find_window(config.WINDOW_TITLE)
         assert self.window is not None
 

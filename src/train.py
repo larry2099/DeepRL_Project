@@ -9,6 +9,10 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+from torchvision.models import vgg
+import torch
+from torch import nn
 
 from callbacks import (
     BestRunRecorder,
@@ -32,7 +36,6 @@ def parse_args():
     parser.add_argument("--total-timesteps", type=int, default=1_000_000)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--frame-stack", type=int, default=4)
     parser.add_argument("--checkpoint", type=str, default=None)
     return parser.parse_args()
 
@@ -107,6 +110,33 @@ def make_sigint_handler(vec_env, recorder):
     return handler
 
 
+class VggExtractor(BaseFeaturesExtractor):
+    def __init__(self, observation_space):
+        features_dim = 512 * 7 * 7
+        super().__init__(observation_space, features_dim)
+
+        self.features = vgg.make_layers(vgg.cfgs["D"], False)
+        self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        x = self.features(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        return x
+
+
 def main():
     args = parse_args()
 
@@ -116,7 +146,6 @@ def main():
                 env_id=rank,
                 display_base=args.display_base,
                 stream_port_base=args.stream_port_base,
-                frame_stack=args.frame_stack,
             )
         )
         for i in range(args.n_envs)
@@ -132,12 +161,18 @@ def main():
     signal.signal(signal.SIGINT, make_sigint_handler(vec_env, recorder))
 
     if args.checkpoint is None:
+        classifier = [4096, 4096]
         model = PPO(
             "CnnPolicy",
             vec_env,
             verbose=1,
             device=args.device,
             tensorboard_log="./tensorboard/",
+            policy_kwargs=dict(
+                activation_fn=torch.nn.ReLU,
+                net_arch=dict(pi=classifier, vf=classifier),
+                features_extractor_class=VggExtractor,
+            ),
         )
     else:
         model = PPO.load(args.checkpoint, vec_env)
