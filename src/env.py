@@ -128,7 +128,7 @@ class GeometryDashEnv(gym.Env):
         reward = 1.0 if not state.is_dead else -config.DEATH_PENALTY
         reward -= 0 if action == 0 else config.JUMP_PENALTY
         terminated = state.is_dead
-        truncated = self._elapsed_steps >= self.max_episode_steps
+        truncated = self._elapsed_steps >= self.max_episode_steps or state.is_restart
         info = self._get_info(state)
 
         self._episode_reward += reward

@@ -213,7 +213,9 @@ class LinuxGame:
 
         if self.vision is None:
             logger.info("creating default vision module")
-            self.vision = Vision("filters/death.png", exact_position=True)
+            self.vision = Vision(
+                "filters/death.png", "filters/complete.png", exact_position=True
+            )
 
         self._last_alive_time = time.perf_counter()
         self._death_start_time = None
@@ -242,6 +244,7 @@ class LinuxGame:
             self._last_alive_time = now
 
         sleep_amt = config.INPUT_FREQUENCY
+
         for evt in self.events:
             if evt.kind == "hold_jump":
                 self.harness.press_key(self.window, "up")
@@ -267,6 +270,22 @@ class LinuxGame:
                 delay = evt.body["delay"]
                 time.sleep(delay)
                 sleep_amt -= delay
+            elif evt.kind == "restart":
+                self.harness.press_key(self.window, "Alt_L")
+                self.harness.press_key(self.window, "F4")
+                self.harness.release_key(self.window, "F4")
+                self.harness.release_key(self.window, "Alt_L")
+
+                self.game_proc = None
+                self.window = None
+                time.sleep(1)
+
+                self.open_game_on_random_level()
+                time.sleep(5)
+                self.window = self.harness.find_window(config.WINDOW_TITLE)
+                assert self.window is not None
+                sleep_amt = 0
+                self.last_state.is_restart = True
 
         self.events = []
 
@@ -290,6 +309,9 @@ class LinuxGame:
     def mouse_move(self, xy, delay=1.0):
         self.events.append(Event("mouse_move", {"delay": delay, "xy": xy}))
 
+    def restart(self) -> None:
+        self.events.append(Event("restart"))
+
     def is_alive(self) -> bool:
         return self.game_proc is not None and self.game_proc.poll() is None
 
@@ -303,21 +325,6 @@ class LinuxGame:
         ):
             return True
         return False
-
-    def restart(self) -> None:
-        self.harness.press_key(self.window, "Alt_L")
-        self.harness.press_key(self.window, "F4")
-        self.harness.release_key(self.window, "F4")
-        self.harness.release_key(self.window, "Alt_L")
-
-        self.game_proc = None
-        self.window = None
-        time.sleep(1)
-
-        self.open_game_on_random_level()
-        time.sleep(5)
-        self.window = self.harness.find_window(config.WINDOW_TITLE)
-        assert self.window is not None
 
     def kill_proc(self, proc):
         if proc is None:

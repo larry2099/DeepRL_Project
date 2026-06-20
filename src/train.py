@@ -111,24 +111,42 @@ def make_sigint_handler(vec_env, recorder):
 
 
 class VggExtractor(BaseFeaturesExtractor):
-    def __init__(self, observation_space):
+    def __init__(self, observation_space, mode="from_scratch"):
+        """
+        mode = 'from_scratch': train from scratch
+               'finetune': load up the default weights, still train them
+               'frozen': load up the default weights, do not update them
+        """
         features_dim = 512 * 7 * 7
         super().__init__(observation_space, features_dim)
+        print("VggExtractor in mode='", mode, "'")
 
-        self.features = vgg.make_layers(vgg.cfgs["D"], False)
-        self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
+        full_model = vgg.vgg16(
+            weights=(vgg.VGG16_Weights.DEFAULT if mode != "from_scratch" else None)
+        )
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
-                if m.bias is not None:
+        self.features = full_model.features
+        self.avgpool = full_model.avgpool
+
+        if mode == "from_scratch":
+            for m in self.modules():
+                if isinstance(m, nn.Conv2d):
+                    nn.init.kaiming_normal_(
+                        m.weight, mode="fan_out", nonlinearity="relu"
+                    )
+                    if m.bias is not None:
+                        nn.init.constant_(m.bias, 0)
+                elif isinstance(m, nn.BatchNorm2d):
+                    nn.init.constant_(m.weight, 1)
                     nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, 0, 0.01)
-                nn.init.constant_(m.bias, 0)
+                elif isinstance(m, nn.Linear):
+                    nn.init.normal_(m.weight, 0, 0.01)
+                    nn.init.constant_(m.bias, 0)
+        elif mode == "frozen":
+            for param in self.features.parameters():
+                param.requires_grad = False
+            for param in self.avgpool.parameters():
+                param.requires_grad = False
 
     def forward(self, x):
         x = self.features(x)
@@ -172,6 +190,8 @@ def main():
                 activation_fn=torch.nn.ReLU,
                 net_arch=dict(pi=classifier, vf=classifier),
                 features_extractor_class=VggExtractor,
+                features_extractor_kwargs=dict(mode="frozen"),
+                share_features_extractor=True,
             ),
         )
     else:
@@ -195,7 +215,7 @@ def main():
                     save_vecnormalize=True,
                 ),
                 RestartCallback(
-                    interval=model.n_steps,
+                    interval=model.n_steps // 2,
                 ),
             ]
         )

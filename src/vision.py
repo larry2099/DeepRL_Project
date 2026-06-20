@@ -18,6 +18,7 @@ import numpy as np
 class VisionState:
     is_dead: bool
     just_died: bool
+    is_restart: bool
     # Reserved for future use; percentage reading is currently disabled
     # because survival time already proxies for progress.
     percent: Optional[int] = None
@@ -29,10 +30,11 @@ class Vision:
     def __init__(
         self,
         death_filter_path: str,
-        death_threshold: float = 0.8,
+        end_filter_path: str,
+        threshold: float = 0.8,
         exact_position: bool = False,
     ) -> None:
-        self.death_threshold = death_threshold
+        self.threshold = threshold
         self.exact_position = exact_position
 
         # Filters are stored as RGBA PNGs; OpenCV loads them as BGRA.
@@ -48,6 +50,16 @@ class Vision:
             self._death_template = death_full
             self._death_mask = death_mask_full
 
+        end_full, end_mask_full = self._load_filter(end_filter_path)
+        self._end_search_bbox = self._bbox(end_mask_full)
+        if self._end_search_bbox is not None:
+            x1, y1, x2, y2 = self._end_search_bbox
+            self._end_template = end_full[y1:y2, x1:x2]
+            self._end_mask = end_mask_full[y1:y2, x1:x2]
+        else:
+            self._end_template = end_full
+            self._end_mask = end_mask_full
+
         self._prev_dead = False
 
     # ------------------------------------------------------------------
@@ -60,9 +72,10 @@ class Vision:
 
         is_dead = self._detect_death(frame_bgr)
         just_died = is_dead and not self._prev_dead
+        is_restart = self._detect_end(frame_bgr)
         self._prev_dead = is_dead
 
-        return VisionState(is_dead=is_dead, just_died=just_died)
+        return VisionState(is_dead=is_dead, just_died=just_died, is_restart=is_restart)
 
     # ------------------------------------------------------------------
     # Internals
@@ -112,7 +125,31 @@ class Vision:
             )
             score = cv2.minMaxLoc(result)[1]
 
-        return score >= self.death_threshold
+        return score >= self.threshold
+
+    def _detect_end(self, frame_bgr: np.ndarray) -> bool:
+        if self._end_template is None or self._end_search_bbox is None:
+            return False
+
+        # The end menu is always in the same screen location, so only match
+        # in that region instead of the whole frame.
+        x1, y1, x2, y2 = self._end_search_bbox
+        search = frame_bgr[y1:y2, x1:x2]
+        if search.size == 0:
+            return False
+
+        if self.exact_position:
+            score = self._masked_ncc(search, self._end_template, self._end_mask)
+        else:
+            result = cv2.matchTemplate(
+                search,
+                self._end_template,
+                cv2.TM_CCOEFF_NORMED,
+                mask=self._end_mask,
+            )
+            score = cv2.minMaxLoc(result)[1]
+
+        return score >= self.threshold
 
     @staticmethod
     def _masked_ncc(frame: np.ndarray, template: np.ndarray, mask: np.ndarray) -> float:
