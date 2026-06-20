@@ -3,14 +3,15 @@ import os
 import signal
 import subprocess
 import time
+from dataclasses import dataclass
 
 import cv2
 from numpy import random
+import numpy as np
 
 import config
 import harness
-from vision import Vision, VisionState
-from gmdkit import GameSave, LevelSave
+from gmdkit import LevelSave
 
 import logging
 
@@ -21,6 +22,42 @@ class Event:
     def __init__(self, kind, body=None):
         self.kind = kind
         self.body = body
+
+
+@dataclass
+class State:
+    is_dead: bool
+    just_died: bool
+    is_restart: bool
+    is_finish: bool
+
+
+class Filter:
+    def __init__(self, path, threshold):
+        img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        if img is None:
+            raise FileNotFoundError(f"could not find filter {path}")
+
+        self.mask: np.ndarray = img[:, :, 3] == 255
+        assert np.any(self.mask)
+
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        self.img = img.astype(np.float32) / 255.0
+
+        self.templ = self.img[self.mask]
+        mean = self.templ.mean()
+        self.templ -= mean
+        self.tsqr_sum = np.sum(self.templ**2)
+
+        self.threshold = threshold
+
+    def match(self, frame: np.ndarray):
+        f = frame[self.mask].astype(np.float32) / 255.0
+        f = f - f.mean()
+        num = np.sum(f * self.templ)
+        den = np.sqrt(np.sum(f**2) * self.tsqr_sum)
+        score = 0 if den < 1e-9 else float(num / den)
+        return score > self.threshold
 
 
 def _find_free_display(start: int = 99) -> int:
@@ -39,7 +76,6 @@ def _find_free_display(start: int = 99) -> int:
 class LinuxGame:
     def __init__(
         self,
-        vision: Vision | None = None,
         display: str | None = None,
         stream_port: int | None = None,
     ):
@@ -57,9 +93,8 @@ class LinuxGame:
         self.ffmpeg_proc = None
 
         self.events = []
-        self.vision = vision
         self.last_frame = None
-        self.last_state: VisionState | None = None
+        self.last_state: State | None = None
 
         # Watchdog state
         self._last_frame_hash: float | None = None
@@ -211,27 +246,27 @@ class LinuxGame:
                 f"could not find window '{config.WINDOW_TITLE}' on {self.display}"
             )
 
-        if self.vision is None:
-            logger.info("creating default vision module")
-            self.vision = Vision(
-                "filters/death.png", "filters/complete.png", exact_position=True
-            )
+        self.death_filter = Filter(config.DEATH_FILTER, config.VISION_THRESHOLD)
+        self.finish_filter = Filter(config.FINISH_FILTER, config.VISION_THRESHOLD)
 
         self._last_alive_time = time.perf_counter()
         self._death_start_time = None
+        self.prev_died = False
         logger.info("welcome!")
 
-    def update(self) -> VisionState:
+    def update(self) -> State:
         self.last_frame = self.harness.capture(self.window)
-        self.last_state = self.vision.update(self.last_frame)
+        dead = self.death_filter.match(self.last_frame)
+        self.last_state = State(
+            is_dead=dead,
+            # is_finish=self.finish_filter.match(self.last_frame),
+            is_finish=False,
+            is_restart=False,
+            just_died=dead and not self.prev_died,
+        )
+        self.prev_died = dead
 
         now = time.perf_counter()
-
-        # Frame-change watchdog
-        frame_hash = float(cv2.mean(self.last_frame)[0])
-        if self._last_frame_hash != frame_hash:
-            self._last_frame_hash = frame_hash
-            self._last_frame_change_time = now
 
         # Alive/death watchdog
         if self.last_state.is_dead:
@@ -271,6 +306,7 @@ class LinuxGame:
                 time.sleep(delay)
                 sleep_amt -= delay
             elif evt.kind == "restart":
+                self.events = []
                 self.harness.press_key(self.window, "Alt_L")
                 self.harness.press_key(self.window, "F4")
                 self.harness.release_key(self.window, "F4")
@@ -314,17 +350,6 @@ class LinuxGame:
 
     def is_alive(self) -> bool:
         return self.game_proc is not None and self.game_proc.poll() is None
-
-    def is_stuck(self, frame_timeout: float = 5.0, death_timeout: float = 30.0) -> bool:
-        now = time.perf_counter()
-        if now - self._last_frame_change_time > frame_timeout:
-            return True
-        if (
-            self._death_start_time is not None
-            and now - self._death_start_time > death_timeout
-        ):
-            return True
-        return False
 
     def kill_proc(self, proc):
         if proc is None:

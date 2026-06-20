@@ -18,3 +18,7 @@ FFMPEG_PATH = "/usr/bin/ffmpeg"
 JUMP_PENALTY = 0.0
 DEATH_PENALTY = 0.0
 RESOLUTION = (224, 224)
+
+DEATH_FILTER = "filters/death.png"
+FINISH_FILTER = "filters/finish.png"
+VISION_THRESHOLD = 0.7

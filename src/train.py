@@ -147,6 +147,10 @@ class VggExtractor(BaseFeaturesExtractor):
                 param.requires_grad = False
             for param in self.avgpool.parameters():
                 param.requires_grad = False
+        elif mode == "finetune":
+            pass
+        else:
+            raise Exception(f"invalid mode: '{mode}'")
 
     def forward(self, x):
         x = self.features(x)
@@ -190,7 +194,7 @@ def main():
                 activation_fn=torch.nn.ReLU,
                 net_arch=dict(pi=classifier, vf=classifier),
                 features_extractor_class=VggExtractor,
-                features_extractor_kwargs=dict(mode="frozen"),
+                features_extractor_kwargs=dict(mode="from_scratch"),
                 share_features_extractor=True,
             ),
         )
