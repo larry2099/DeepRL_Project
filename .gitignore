@@ -3,5 +3,5 @@ tensorboard/
 *.zip
 best_runs/
 checkpoints/
-
+bin/
 

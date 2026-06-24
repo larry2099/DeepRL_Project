@@ -4,7 +4,7 @@ debug:
 
 .PHONY: train
 train:
-	python src/train.py --n-envs 2 
+	python src/train.py --n-envs 3 
 
 .PHONY: record
 record:
@@ -14,6 +14,13 @@ record:
 stats:
 	tensorboard --logdir tensorboard/
 
+bin/speedhack.so: speedhack.c
+	mkdir -p bin
+	gcc -shared -fPIC -o bin/speedhack.so speedhack.c -ldl
+
+.PHONY: build
+build: bin/speedhack.so
+
 .PHONY: clean
 clean:
 	rm -rf tensorboard/
@@ -22,3 +29,4 @@ clean:
 	rm -rf *.png
 	rm -rf best_runs/
 	rm -rf checkpoints/
+	rm -rf bin/

@@ -146,7 +146,7 @@ class LinuxGame:
         ratio_x = 800 / 1920
         ratio_y = 600 / 1080
         for x, y in [(1332, 501), (353, 222), (1445, 302)]:
-            self.mouse_move((int(x * ratio_x), int(y * ratio_y)))
+            self.mouse_move((int(x * ratio_x), int(y * ratio_y)), 0.1)
             self.click((int(x * ratio_x), int(y * ratio_y)))
 
         self.interact()
@@ -280,7 +280,10 @@ class LinuxGame:
 
         sleep_amt = config.INPUT_FREQUENCY
 
-        for evt in self.events:
+        while len(self.events) != 0:
+            evt = self.events[0]
+            self.events = self.events[1:]
+
             if evt.kind == "hold_jump":
                 self.harness.press_key(self.window, "up")
                 time.sleep(config.INPUT_FREQUENCY)
@@ -306,7 +309,6 @@ class LinuxGame:
                 time.sleep(delay)
                 sleep_amt -= delay
             elif evt.kind == "restart":
-                self.events = []
                 self.harness.press_key(self.window, "Alt_L")
                 self.harness.press_key(self.window, "F4")
                 self.harness.release_key(self.window, "F4")
@@ -316,8 +318,9 @@ class LinuxGame:
                 self.window = None
                 time.sleep(1)
 
+                self.events = []
                 self.open_game_on_random_level()
-                time.sleep(5)
+                time.sleep(3)
                 self.window = self.harness.find_window(config.WINDOW_TITLE)
                 assert self.window is not None
                 sleep_amt = 0
