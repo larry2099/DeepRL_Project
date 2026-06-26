@@ -7,9 +7,9 @@ import math
 class Settings:
     SCALE = 30
     RESOLUTION = (800, 600)
-    SPEED = 10
-    GRAVITY = 70
-    JUMP = 17
+    SPEED = 9.6
+    GRAVITY = 71.88
+    JUMP = 15.89
 
     PLAYER_GRP = 0x0001
     GROUND_GRP = 0x0002
@@ -254,6 +254,7 @@ class Game:
             ),
         )
 
+        anchor = self.world.CreateStaticBody(position=(0, 0))
         self.player = self.world.CreateDynamicBody(
             position=(0, 0),
             fixedRotation=True,
@@ -269,6 +270,11 @@ class Game:
                     ),
                 ),
             ],
+        )
+        self.world.CreatePrismaticJoint(
+            bodyA=anchor,
+            bodyB=self.player,
+            localAxisA=b2Vec2(0, 1),
         )
 
         self.level.build(self.world)
