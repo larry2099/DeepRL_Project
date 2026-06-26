@@ -55,8 +55,16 @@ class Settings:
     )
 
     OBJECT_DATA = [
-        {"shape": [BLOCK_SHAPE, BLOCK_GROUND, BLOCK_KILLBOX], "name": "block"},
-        {"shape": [SPIKE_SHAPE, SPIKE_KILLBOX], "name": "spike"},
+        {
+            "name": "block",
+            "shape": [BLOCK_SHAPE, BLOCK_GROUND, BLOCK_KILLBOX],
+            "color": 0x0000FF,
+        },
+        {
+            "name": "spike",
+            "shape": [SPIKE_SHAPE, SPIKE_KILLBOX],
+            "color": 0xFF00FF,
+        },
     ]
 
 
@@ -106,30 +114,33 @@ class ContactListener(Box2D.b2ContactListener):
 
 class Level:
     def __init__(self):
-        self.objs = [
-            [0, 10, 0],
-            [0, 13, 0],
-            [0, 13, 1],
-            [0, 13, 2],
-            [1, 20, 0],
-            [1, 21, 0],
-        ]
+        self.objs = []
         self.freelist = []
-
         self.world: Box2D.b2World | None = None
-        self.platforms = set()
-        self.spikes = set()
+        self.bodies = set()
 
-    def deserialize(self, s):
-        pass
+    def deserialize(self, s: str):
+        for obj in s.split(";"):
+            a = obj.split(":")
+            if len(a) != 2:
+                continue
+
+            kind, coords = a[0], a[1]
+            b = coords.split(",")
+            x, y = b[0], b[1]
+            self.objs.append([int(kind), float(x), float(y)])
 
     def serialize(self):
-        pass
+        s = ""
+        for obj in self.objs:
+            if len(obj) == 0:
+                continue
+            s += "{}:{},{};".format(obj[0], obj[1], obj[2])
+        return s
 
     def build(self, world: Box2D.b2World):
         self.world = world
-        self.platforms = set()
-        self.spikes = set()
+        self.bodies = set()
 
         for i, _ in enumerate(self.objs):
             self.create(i)
@@ -147,10 +158,7 @@ class Level:
             userData=idx,
         )
 
-        if obj[0] == 0:
-            self.platforms.add(o)
-        elif obj[0] == 1:
-            self.spikes.add(o)
+        self.bodies.add(o)
 
     def place(self, kind, pos: b2Vec2):
         if len(self.freelist) != 0:
@@ -170,10 +178,10 @@ class Level:
                 self.obj = None
 
             def ReportFixture(self, fixture):
-                if self.obj is not None:
-                    return False
+                if fixture.body.userData is None:
+                    return True
                 self.obj = fixture.body
-                return True
+                return False
 
         query = Query()
         aabb = Box2D.b2AABB(
@@ -187,28 +195,38 @@ class Level:
 
         idx = query.obj.userData
         if len(self.objs[idx]) != 0:
-            if self.objs[idx][0] == 0:
-                self.platforms.remove(query.obj)
-            elif self.objs[idx][0] == 1:
-                self.spikes.remove(query.obj)
-            else:
-                raise Exception("invalid object", idx, self.objs[idx])
-
+            self.bodies.remove(query.obj)
             self.freelist.append(idx)
             self.objs[idx] = []
             self.world.DestroyBody(query.obj)
 
+    def __iter__(self):
+        for obj in self.bodies:
+            yield (self.objs[obj.userData][0], obj)
+
 
 class Game:
-    def __init__(self):
+    def __init__(self, level_file: str | None = None):
         pygame.init()
         self.screen = pygame.display.set_mode((800, 600))
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font(size=40)
+        self.font = pygame.font.Font(None, size=40)
         self.running = True
 
         self.level = Level()
+        if level_file is None:
+            level_file = "lvl1.txt"
+            self.level.deserialize("0:10,0;0:12,0;0:12,1;0:12,2;")
+        else:
+            with open(level_file, "r") as f:
+                self.level.deserialize(f.read())
+
+        self.level_file = level_file
+
         self.reset()
+
+        self.prev_frame_pressed = None
+        self.prev_frame_mouse = (False, False, False)
 
         self.editing = False
         self.editor_selected: int = 0
@@ -263,7 +281,7 @@ class Game:
             if evt.type == pygame.QUIT:
                 self.running = False
 
-        if pygame.key.get_just_pressed()[pygame.K_e]:
+        if self.keyJustPressed(pygame.K_e):
             self.editing = not self.editing
             self.reset()
 
@@ -282,15 +300,19 @@ class Game:
         pygame.display.flip()
         self.clock.tick(60)
 
-    def draw_object(self, obj, color):
+        self.prev_frame_pressed = pygame.key.get_pressed()
+        self.prev_frame_mouse = pygame.mouse.get_pressed()
+
+    def drawObject(self, obj, color):
         shape = obj.fixtures[0].shape
         if isinstance(shape, Box2D.b2PolygonShape):
             pts = shape.vertices
             pts = [self.cam.apply(b2Vec2(p) + obj.position) for p in pts]
+            pts = [(p.x, p.y) for p in pts]
             pygame.draw.polygon(self.screen, color, pts)
 
     def updateInGame(self):
-        if pygame.key.get_just_pressed()[pygame.K_r]:
+        if self.keyJustPressed(pygame.K_r):
             self.reset()
         if pygame.key.get_pressed()[pygame.K_SPACE] and self.player_on_ground != 0:
             self.player.linearVelocity = (0, Settings.JUMP)
@@ -300,27 +322,30 @@ class Game:
             self.reset()
 
     def drawInGame(self):
-        self.draw_object(self.ground, 0x00FF00)
-        self.draw_object(self.player, 0xFF0000)
+        self.drawObject(self.ground, 0x00FF00)
+        self.drawObject(self.player, 0xFF0000)
 
-        for platform in self.level.platforms:
-            self.draw_object(platform, 0x0000FF)
-        for spike in self.level.spikes:
-            self.draw_object(spike, 0xFF00FF)
+        for kind, obj in self.level:
+            self.drawObject(obj, Settings.OBJECT_DATA[kind]["color"])
 
     def updateEditor(self):
         dt = self.clock.get_time()
 
-        if pygame.key.get_pressed()[pygame.K_a]:
-            self.cam.world_offset += Settings.CAM_SPEED * dt * b2Vec2(1, 0)
-        if pygame.key.get_pressed()[pygame.K_d]:
-            self.cam.world_offset += Settings.CAM_SPEED * dt * b2Vec2(-1, 0)
-        if pygame.key.get_pressed()[pygame.K_w]:
-            self.cam.world_offset += Settings.CAM_SPEED * dt * b2Vec2(0, -1)
-        if pygame.key.get_pressed()[pygame.K_s]:
-            self.cam.world_offset += Settings.CAM_SPEED * dt * b2Vec2(0, 1)
+        if pygame.key.get_mods() & pygame.KMOD_CTRL == 0:
+            if pygame.key.get_pressed()[pygame.K_a]:
+                self.cam.world_offset += Settings.CAM_SPEED * dt * b2Vec2(1, 0)
+            if pygame.key.get_pressed()[pygame.K_d]:
+                self.cam.world_offset += Settings.CAM_SPEED * dt * b2Vec2(-1, 0)
+            if pygame.key.get_pressed()[pygame.K_w]:
+                self.cam.world_offset += Settings.CAM_SPEED * dt * b2Vec2(0, -1)
+            if pygame.key.get_pressed()[pygame.K_s]:
+                self.cam.world_offset += Settings.CAM_SPEED * dt * b2Vec2(0, 1)
+        else:
+            if self.keyJustPressed(pygame.K_s):
+                with open(self.level_file, "w") as f:
+                    f.write(self.level.serialize())
 
-        lmb, _, rmb, _, _ = pygame.mouse.get_just_pressed()
+        (lmb, _, rmb) = self.mouseJustPressed()
         x, y = pygame.mouse.get_pos()
         p = self.cam.applyInv(b2Vec2(x, y))
 
@@ -331,7 +356,7 @@ class Game:
             self.level.erase(p)
 
         for i, k in enumerate(range(pygame.K_0, pygame.K_9 + 1)):
-            if pygame.key.get_just_pressed()[k] and len(Settings.OBJECT_DATA) > i:
+            if self.keyJustPressed(k) and len(Settings.OBJECT_DATA) > i:
                 self.editor_selected = i
 
     def drawEditor(self):
@@ -344,12 +369,10 @@ class Game:
         ]
         pygame.draw.rect(self.screen, 0x00FF00, rect)
 
-        self.draw_object(self.player, 0xFF0000)
+        self.drawObject(self.player, 0xFF0000)
 
-        for platform in self.level.platforms:
-            self.draw_object(platform, 0x0000FF)
-        for spike in self.level.spikes:
-            self.draw_object(spike, 0xFF00FF)
+        for kind, obj in self.level:
+            self.drawObject(obj, Settings.OBJECT_DATA[kind]["color"])
 
         self.drawGrid()
 
@@ -381,14 +404,27 @@ class Game:
         for i in range(left, right + 1):
             a = self.cam.apply(b2Vec2(i - 0.5, top))
             b = self.cam.apply(b2Vec2(i - 0.5, bot))
-            pygame.draw.line(self.screen, 0, a, b, 2)
+            pygame.draw.line(self.screen, 0, (a.x, a.y), (b.x, b.y), 2)
         for i in range(bot, top + 1):
             a = self.cam.apply(b2Vec2(left, i - 0.5))
             b = self.cam.apply(b2Vec2(right, i - 0.5))
-            pygame.draw.line(self.screen, 0, a, b, 2)
+            pygame.draw.line(self.screen, 0, (a.x, a.y), (b.x, b.y), 2)
+
+    def keyJustPressed(self, key):
+        if self.prev_frame_pressed is None:
+            return pygame.key.get_pressed()[key]
+        elif self.prev_frame_pressed[key]:
+            return False
+        else:
+            return pygame.key.get_pressed()[key]
+
+    def mouseJustPressed(self):
+        (lmb, mmb, rmb) = pygame.mouse.get_pressed()
+        (a, b, c) = self.prev_frame_mouse
+        return (lmb and not a, mmb and not b, rmb and not c)
 
 
 if __name__ == "__main__":
-    g = Game()
+    g = Game("lvl1.txt")
     while g.running:
         g.run()
