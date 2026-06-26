@@ -14,8 +14,6 @@ cd "$GAME_ROOT" || exit
 mkdir -p $PROTON_PATH
 export STEAM_COMPAT_DATA_PATH=$PROTON_PATH
 export STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_ROOT"
-export LD_PRELOAD="$SPEEDHACK"
+# export LD_PRELOAD="$SPEEDHACK"
 
-# wine "$GAME_EXE"
-# "$STEAM_ROOT/steamapps/common/$PROTON_VER/proton" run "$GAME_EXE" >/dev/null 2>&1 &
-"$STEAM_ROOT/steamapps/common/$PROTON_VER/proton" run "$GAME_EXE" 
+"$STEAM_ROOT/steamapps/common/$PROTON_VER/proton" run "$GAME_EXE" >/dev/null 2>&1 &

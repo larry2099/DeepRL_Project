@@ -109,7 +109,7 @@ class LinuxGame:
         GAME_ROOT = os.path.dirname(config.GAME_PATH)
         GAME = os.path.basename(config.GAME_PATH)
 
-        WINE_PREFIX_GOLDEN = PROTON_ROOT + "/" + GAME
+        WINE_PREFIX_GOLDEN = PROTON_ROOT + "/" + "gd-golden"
         assert os.path.exists(WINE_PREFIX_GOLDEN)
         self.WINE_PREFIX = WINE_PREFIX_GOLDEN + "-" + self.display
         os.system(f"cp -r {WINE_PREFIX_GOLDEN} {self.WINE_PREFIX}")
@@ -117,6 +117,7 @@ class LinuxGame:
         env = os.environ.copy()
         env["STEAM_COMPAT_DATA_PATH"] = self.WINE_PREFIX
         env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = STEAM_ROOT
+        env["LD_PRELOAD"] = config.PWD + "/bin/speedhack.so"
         CC_LOCAL_LEVELS = (
             self.WINE_PREFIX
             + "/pfx/drive_c/users/steamuser/AppData/Local/GeometryDash/CCLocalLevels.dat"
@@ -147,7 +148,7 @@ class LinuxGame:
         ratio_y = 600 / 1080
         for x, y in [(1332, 501), (353, 222), (1445, 302)]:
             self.mouse_move((int(x * ratio_x), int(y * ratio_y)), 0.1)
-            self.click((int(x * ratio_x), int(y * ratio_y)))
+            self.click((int(x * ratio_x), int(y * ratio_y)), 1.5)
 
         self.interact()
 
@@ -320,7 +321,7 @@ class LinuxGame:
 
                 self.events = []
                 self.open_game_on_random_level()
-                time.sleep(3)
+                time.sleep(4)
                 self.window = self.harness.find_window(config.WINDOW_TITLE)
                 assert self.window is not None
                 sleep_amt = 0

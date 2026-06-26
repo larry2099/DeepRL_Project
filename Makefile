@@ -3,7 +3,7 @@ debug:
 	python src/debug.py
 
 .PHONY: train
-train:
+train: bin/speedhack.so
 	python src/train.py --n-envs 3 
 
 .PHONY: record
