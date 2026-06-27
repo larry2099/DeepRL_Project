@@ -1,9 +1,11 @@
+import os
 import Box2D
 import pygame
 from Box2D import b2Vec2
 import math
+import numpy as np
 
-# TODO: build some levels
+# TODO: win condition
 
 
 class Settings:
@@ -307,25 +309,18 @@ class Level:
 
 
 class Game:
-    def __init__(self, level_file: str | None = None):
+    def __init__(self, headless=False):
+        if headless:
+            os.environ["SDL_VIDEODRIVER"] = "dummy"
+        elif "SDL_VIDEODRIVER" in os.environ:
+            os.environ.pop("SDL_VIDEODRIVER")
+
         pygame.init()
+        self.headless = headless
         self.screen = pygame.display.set_mode(Settings.RESOLUTION)
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, size=40)
         self.running = True
-
-        self.level = Level()
-        if level_file is None:
-            level_file = "lvl1.txt"
-            self.level.deserialize("0,0!0:10,0;0:12,0;0:12,1;0:12,2;")
-        else:
-            with open(level_file, "r") as f:
-                self.level.deserialize(f.read())
-
-        self.level_file = level_file
-
-        self.reset()
-
         self.prev_frame_pressed = None
         self.prev_frame_mouse = (False, False, False)
 
@@ -335,8 +330,25 @@ class Game:
 
         self.dt = 1 / Settings.FPS  # fixed dt for stable env
 
-    def reset(self):
+        self.pixels = None
+        self.handled_events = False
+
+    def reset(self, level_file=None):
         self.cam = Camera()
+        self.running = True
+
+        self.level = Level()
+        if level_file is None:
+            level_file = self.level_file
+
+        if level_file is None:
+            level_file = "lvl1.txt"
+            self.level.deserialize("0,0!1:10,0;")
+        else:
+            with open(level_file, "r") as f:
+                self.level.deserialize(f.read())
+
+        self.level_file = level_file
 
         self.player_on_ground = 0
         self.player_in_jump_orb = set()
@@ -384,22 +396,32 @@ class Game:
 
         self.level.build(self.world)
 
+        self.is_jumping = False
+
     def run(self):
         if not self.running:
             return
 
-        for evt in pygame.event.get():
-            if evt.type == pygame.QUIT:
-                self.running = False
+        self.handleEvents()
+        self.update()
+        self.render()
 
+    def update(self):
         if self.keyJustPressed(pygame.K_e):
             self.editing = not self.editing
             self.reset()
 
-        if not self.editing:
+        if not self.editing and not self.player_dead:
             self.updateInGame()
-        else:
+        elif self.editing:
             self.updateEditor()
+
+        self.prev_frame_pressed = pygame.key.get_pressed()
+        self.prev_frame_mouse = pygame.mouse.get_pressed()
+
+    def render(self):
+        self.pixels = None
+        self.handleEvents()
 
         self.screen.fill("gray")
 
@@ -409,10 +431,43 @@ class Game:
             self.drawEditor()
 
         pygame.display.flip()
-        self.clock.tick(60)
 
-        self.prev_frame_pressed = pygame.key.get_pressed()
-        self.prev_frame_mouse = pygame.mouse.get_pressed()
+        if not self.headless:
+            self.clock.tick(Settings.FPS)
+        self.handled_events = False
+
+    def getPixles(self, resolution):
+        if self.pixels is not None:
+            return self.pixels
+
+        surf = pygame.Surface(resolution)
+        pygame.transform.scale(self.screen, resolution, surf)
+        self.pixels = (
+            pygame.surfarray.array3d(surf).mean(axis=2).astype(np.float32) / 255.0
+        )
+        return self.pixels
+
+    def handleEvents(self):
+        if self.handled_events:
+            return
+        for evt in pygame.event.get():
+            if evt.type == pygame.QUIT:
+                self.running = False
+        self.handled_events = True
+
+    def close(self):
+        self.running = False
+        pygame.display.quit()
+        pygame.quit()
+
+    def jump(self):
+        self.is_jumping = True
+
+    def is_dead(self):
+        return self.player_dead
+
+    def on_ground(self):
+        return self.player_on_ground != 0 or len(self.player_in_jump_orb) != 0
 
     def drawObject(self, obj, color):
         shape = obj.fixtures[0].shape
@@ -423,16 +478,16 @@ class Game:
             pygame.draw.polygon(self.screen, color, pts)
 
     def updateInGame(self):
+        pressed = pygame.key.get_pressed()
         if self.keyJustPressed(pygame.K_r):
             self.reset()
-        if pygame.key.get_pressed()[pygame.K_SPACE] and (
-            self.player_on_ground != 0 or len(self.player_in_jump_orb) != 0
-        ):
+
+        if (pressed[pygame.K_SPACE] or self.is_jumping) and self.on_ground():
+            self.player.linearVelocity = (0, Settings.JUMP_VEL)
+
             if len(self.player_in_jump_orb) != 0:
                 orb = self.player_in_jump_orb.pop()
                 orb.fixtures[1].filterData.categoryBits &= ~Settings.JUMP_ORB_GRP
-
-            self.player.linearVelocity = (0, Settings.JUMP_VEL)
 
         self.world.Step(self.dt, 10, 10)
 
@@ -440,8 +495,7 @@ class Game:
             self.player.position - self.cam.target_offset
         )
 
-        if self.player_dead:
-            self.reset()
+        self.is_jumping = False
 
     def drawInGame(self):
         self.drawObject(self.ground, 0x00FF00)
@@ -599,6 +653,7 @@ class Game:
 
 
 if __name__ == "__main__":
-    g = Game("levels/3.txt")
+    g = Game()
+    g.reset("levels/1.txt")
     while g.running:
         g.run()
