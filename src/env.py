@@ -154,8 +154,9 @@ class GameEnv(gym.Env):
         self.game.run()
 
         obs = self.obs_kind.observe(self.game)
+        # TODO: tweak this?
         reward = 1.0 if not self.game.is_dead() else 0.0
-        term = self.game.is_dead() or not self.game.running
+        term = self.game.is_dead() or not self.game.running or self.game.is_win()
 
         return obs, reward, term, False, {}
 
@@ -192,10 +193,12 @@ be a pygame window. In human mode the game is locked to 60fps.
 GameEnv.reset() by default picks a random level every time, you can pass an 
 optional parameter 'level' to pick a specific level.
 
+You can tweak the reward function in GameEnv.step.
+
 """
 
 if __name__ == "__main__":
-    obs_kind = ObservationKind.raycasts(include_on_ground=True, frame_count=4)
+    obs_kind = ObservationKind.raycasts(include_on_ground=True, frame_count=2)
     env = GameEnv(obs_kind=obs_kind, render_mode="human")
 
     while True:

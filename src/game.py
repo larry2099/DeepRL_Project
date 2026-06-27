@@ -7,8 +7,6 @@ import numpy as np
 
 import pygame
 
-# TODO: win condition
-
 
 class Settings:
     SCALE = 30
@@ -28,8 +26,9 @@ class Settings:
     KILL_GRP = 1 << 2
     JUMP_PAD_GRP = 1 << 3
     JUMP_ORB_GRP = 1 << 4
+    FINISH_GRP = 1 << 5
 
-    PLAYER_REACT_GRP = GROUND_GRP | KILL_GRP | JUMP_PAD_GRP | JUMP_ORB_GRP
+    PLAYER_REACT_GRP = GROUND_GRP | KILL_GRP | JUMP_PAD_GRP | JUMP_ORB_GRP | FINISH_GRP
 
     BLOCK_SHAPE = Box2D.b2FixtureDef(
         shape=Box2D.b2PolygonShape(box=(0.5, 0.5)),
@@ -95,6 +94,14 @@ class Settings:
             maskBits=PLAYER_GRP,
         ),
     )
+    FINISH_SHAPE = Box2D.b2FixtureDef(
+        shape=Box2D.b2CircleShape(radius=0.5, pos=(0, 0)),
+        isSensor=True,
+        filter=Box2D.b2Filter(
+            categoryBits=FINISH_GRP,
+            maskBits=PLAYER_GRP,
+        ),
+    )
 
     OBJECT_DATA = [
         {
@@ -121,6 +128,11 @@ class Settings:
             "name": "small_spike",
             "shape": [SMALL_SPIKE_SHAPE, SMALL_SPIKE_KILLBOX],
             "color": 0xFF00FF,
+        },
+        {
+            "name": "finish",
+            "shape": [FINISH_SHAPE],
+            "color": 0x00B827,
         },
     ]
 
@@ -163,6 +175,9 @@ class ContactListener(Box2D.b2ContactListener):
 
         if bits & Settings.JUMP_ORB_GRP:
             self.game.player_in_jump_orb.add(other.body)
+
+        if bits & Settings.FINISH_GRP:
+            self.game.player_win = True
 
     def EndContact(self, contact):
         _, other = self.player_and_other(contact.fixtureA, contact.fixtureB)
@@ -371,6 +386,7 @@ class Game:
         self.player_on_ground = 0
         self.player_in_jump_orb = set()
         self.player_dead = False
+        self.player_win = False
 
         self.world = Box2D.b2World(
             gravity=(0, -Settings.GRAVITY),
@@ -433,7 +449,7 @@ class Game:
             self.editing = not self.editing
             self.reset()
 
-        if not self.editing and not self.player_dead:
+        if not self.editing and not self.player_dead and not self.player_win:
             self.updateInGame()
         elif self.editing and self.mode != Mode.NO_RENDER:
             self.updateEditor()
@@ -491,6 +507,9 @@ class Game:
     def is_dead(self):
         return self.player_dead
 
+    def is_win(self):
+        return self.player_win
+
     def on_ground(self):
         return self.player_on_ground != 0 or len(self.player_in_jump_orb) != 0
 
@@ -532,6 +551,10 @@ class Game:
             pts = [self.cam.apply(b2Vec2(p) + obj.position) for p in pts]
             pts = [(p.x, p.y) for p in pts]
             pygame.draw.polygon(self.screen, color, pts)
+        elif isinstance(shape, Box2D.b2CircleShape):
+            center = self.cam.apply(obj.position)
+            rad = shape.radius * self.cam.scale
+            pygame.draw.circle(self.screen, color, (center.x, center.y), rad)
 
     def updateInGame(self):
         if self.mode != Mode.NO_RENDER:
@@ -737,6 +760,6 @@ class Game:
 
 if __name__ == "__main__":
     g = Game()
-    g.reset("levels/1.txt")
+    g.reset("levels/3.txt")
     while g.running:
         g.run()
