@@ -34,7 +34,7 @@ class ObservationKind:
         s = ObservationKind(**kwargs)
         s.kind = ObservationKind.PIXELS
         s.resolution = resolution
-        s.frames = s.space().sample((s.frame_count, None))
+        s.frames = s.space().sample()
         return s
 
     @staticmethod
@@ -50,28 +50,41 @@ class ObservationKind:
             t = dt * (i - count // 2)
             s.directions.append(b2Vec2(math.cos(t), math.sin(t)))
 
-        s.frames = s.space().sample((s.frame_count, None))
+        s.frames = s.space().sample()
 
         return s
 
     def space(self):
         if self.kind == ObservationKind.PIXELS:
-            d = {"pixels": gym.spaces.Box(0, 1, self.resolution)}
+            d = {
+                "pixels": gym.spaces.Box(
+                    0, 1, (self.frame_count, self.resolution[0], self.resolution[1])
+                )
+            }
+
         elif self.kind == ObservationKind.RAYCASTS:
             obj_count = len(Settings.OBJECT_DATA)
+            counts = np.array(
+                [
+                    [obj_count + 2 for _ in range(self.resolution)]
+                    for _ in range(self.frame_count)
+                ]
+            )
+            starts = np.array(
+                [[-1 for _ in range(self.resolution)] for _ in range(self.frame_count)]
+            )
 
             d = {
-                "dists": gym.spaces.Box(0, 1, (self.resolution,)),
-                "kinds": gym.spaces.MultiDiscrete(
-                    [obj_count + 2 for _ in range(self.resolution)],
-                    start=[-1 for _ in range(self.resolution)],
-                ),
+                "dists": gym.spaces.Box(0, 1, (self.frame_count, self.resolution)),
+                "kinds": gym.spaces.MultiDiscrete(counts, start=starts),
             }
 
         if self.include_on_ground:
-            d["on_ground"] = gym.spaces.Discrete(2)
+            d["on_ground"] = gym.spaces.MultiDiscrete(
+                [2 for _ in range(self.frame_count)]
+            )
 
-        return gym.spaces.Sequence(gym.spaces.Dict(d), stack=True)
+        return gym.spaces.Dict(d)
 
     def observe(self, game: Game):
         i = self.counter % self.frame_count
@@ -198,7 +211,8 @@ You can tweak the reward function in GameEnv.step.
 """
 
 if __name__ == "__main__":
-    env = GameEnv(render_mode="human")
+    env = GameEnv(render_mode="human", obs_kind=ObservationKind.pixels(frame_count=2))
+
     from PIL import Image
 
     obs, _ = env.reset(options={"level": "2.txt"})
