@@ -12,7 +12,7 @@ class Settings:
     SPEED = 9.6
     GRAVITY = 2 * 0.43 * SPEED * SPEED
     JUMP_VEL = 1.9 * SPEED
-    JUMP_PAD_VEL = 28.0
+    JUMP_PAD_VEL = 2.74 * SPEED
     FPS = 60
 
     PLAYER_GRP = 1 << 0
