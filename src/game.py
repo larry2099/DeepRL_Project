@@ -78,6 +78,18 @@ class Settings:
             maskBits=PLAYER_GRP,
         ),
     )
+    SMALL_SPIKE_SHAPE = Box2D.b2FixtureDef(
+        shape=Box2D.b2PolygonShape(vertices=[(-0.5, -0.5), (0, 0), (0.5, -0.5)]),
+        isSensor=True,
+    )
+    SMALL_SPIKE_KILLBOX = Box2D.b2FixtureDef(
+        shape=Box2D.b2PolygonShape(box=(0.2, 0.2, (0, -0.2), 0)),
+        isSensor=True,
+        filter=Box2D.b2Filter(
+            categoryBits=KILL_GRP,
+            maskBits=PLAYER_GRP,
+        ),
+    )
 
     OBJECT_DATA = [
         {
@@ -99,6 +111,11 @@ class Settings:
             "name": "jump_orb",
             "shape": [JUMP_ORB_SHAPE, JUMP_ORB_HITBOX],
             "color": 0xFF8800,
+        },
+        {
+            "name": "small_spike",
+            "shape": [SMALL_SPIKE_SHAPE, SMALL_SPIKE_KILLBOX],
+            "color": 0xFF00FF,
         },
     ]
 
@@ -278,8 +295,10 @@ class Game:
         self.player_dead = False
 
         self.world = Box2D.b2World(
-            gravity=(0, -Settings.GRAVITY), contactListener=ContactListener(self)
+            gravity=(0, -Settings.GRAVITY),
+            contactListener=ContactListener(self),
         )
+
         self.ground = self.world.CreateBody(
             position=(0, -3),
             fixtures=Box2D.b2FixtureDef(
