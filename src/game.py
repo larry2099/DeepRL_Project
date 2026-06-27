@@ -9,11 +9,16 @@ class Settings:
     RESOLUTION = (800, 600)
     SPEED = 9.6
     GRAVITY = 71.88
-    JUMP = 15.89
+    JUMP_VEL = 15.89
+    JUMP_PAD_VEL = 28.0
+    FPS = 60
 
-    PLAYER_GRP = 0x0001
-    GROUND_GRP = 0x0002
-    KILL_GRP = 0x0004
+    PLAYER_GRP = 1 << 0
+    GROUND_GRP = 1 << 1
+    KILL_GRP = 1 << 2
+    JUMP_PAD_GRP = 1 << 3
+
+    PLAYER_REACT_GRP = GROUND_GRP | KILL_GRP | JUMP_PAD_GRP
 
     CAM_SPEED = 1e-2
     QUERY_SIZE = b2Vec2(0.1, 0.1)
@@ -53,6 +58,26 @@ class Settings:
             maskBits=PLAYER_GRP,
         ),
     )
+    JUMP_PAD_SHAPE = Box2D.b2FixtureDef(
+        shape=Box2D.b2PolygonShape(box=(0.45, 0.05, (0, -0.45), 0)),
+        isSensor=True,
+        filter=Box2D.b2Filter(
+            categoryBits=JUMP_PAD_GRP,
+            maskBits=PLAYER_GRP,
+        ),
+    )
+    JUMP_ORB_SHAPE = Box2D.b2FixtureDef(
+        shape=Box2D.b2PolygonShape(box=(0.2, 0.2)),
+        isSensor=True,
+    )
+    JUMP_ORB_HITBOX = Box2D.b2FixtureDef(
+        shape=Box2D.b2PolygonShape(box=(0.5, 0.5)),
+        isSensor=True,
+        filter=Box2D.b2Filter(
+            categoryBits=GROUND_GRP,
+            maskBits=PLAYER_GRP,
+        ),
+    )
 
     OBJECT_DATA = [
         {
@@ -64,6 +89,16 @@ class Settings:
             "name": "spike",
             "shape": [SPIKE_SHAPE, SPIKE_KILLBOX],
             "color": 0xFF00FF,
+        },
+        {
+            "name": "jump_pad",
+            "shape": [JUMP_PAD_SHAPE],
+            "color": 0xFFFF00,
+        },
+        {
+            "name": "jump_orb",
+            "shape": [JUMP_ORB_SHAPE, JUMP_ORB_HITBOX],
+            "color": 0xFF8800,
         },
     ]
 
@@ -98,6 +133,9 @@ class ContactListener(Box2D.b2ContactListener):
 
         if other.filterData.categoryBits & Settings.KILL_GRP != 0:
             self.game.player_dead = True
+
+        if other.filterData.categoryBits & Settings.JUMP_PAD_GRP:
+            self.game.player.linearVelocity = b2Vec2(0, Settings.JUMP_PAD_VEL)
 
     def EndContact(self, contact):
         _, other = self.player_and_other(contact.fixtureA, contact.fixtureB)
@@ -208,7 +246,7 @@ class Level:
 class Game:
     def __init__(self, level_file: str | None = None):
         pygame.init()
-        self.screen = pygame.display.set_mode((800, 600))
+        self.screen = pygame.display.set_mode(Settings.RESOLUTION)
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, size=40)
         self.running = True
@@ -231,7 +269,7 @@ class Game:
         self.editing = False
         self.editor_selected: int = 0
 
-        self.dt = 1 / 60  # fixed dt for stable env
+        self.dt = 1 / Settings.FPS  # fixed dt for stable env
 
     def reset(self):
         self.cam = Camera()
@@ -266,7 +304,7 @@ class Game:
                     restitution=0,
                     filter=Box2D.b2Filter(
                         categoryBits=Settings.PLAYER_GRP,
-                        maskBits=Settings.GROUND_GRP | Settings.KILL_GRP,
+                        maskBits=Settings.PLAYER_REACT_GRP,
                     ),
                 ),
             ],
@@ -321,7 +359,7 @@ class Game:
         if self.keyJustPressed(pygame.K_r):
             self.reset()
         if pygame.key.get_pressed()[pygame.K_SPACE] and self.player_on_ground != 0:
-            self.player.linearVelocity = (0, Settings.JUMP)
+            self.player.linearVelocity = (0, Settings.JUMP_VEL)
         self.world.Step(self.dt, 10, 10)
 
         if self.player_dead:
