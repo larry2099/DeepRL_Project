@@ -198,23 +198,25 @@ You can tweak the reward function in GameEnv.step.
 """
 
 if __name__ == "__main__":
-    obs_kind = ObservationKind.raycasts(include_on_ground=True, frame_count=2)
-    env = GameEnv(obs_kind=obs_kind, render_mode="human")
+    env = GameEnv(render_mode="human")
+    from PIL import Image
+
+    obs, _ = env.reset(options={"level": "2.txt"})
+
+    total_rew = 0
+    steps = 0
+    start = time.perf_counter()
 
     while True:
-        obs, _ = env.reset()
-        total_rew = 0
-        steps = 0
-        start = time.perf_counter()
+        act = env.action_space.sample()
+        obs, rew, term, _, _ = env.step(act)
+        steps += 1
+        total_rew += rew
 
-        while True:
-            act = env.action_space.sample()
-            obs, rew, term, _, _ = env.step(act)
-            steps += 1
-            total_rew += rew
+        if term:
+            break
 
-            if term:
-                break
+    Image.fromarray(obs["pixels"][0] * 255.0).show()
 
-        duration = time.perf_counter() - start
-        print(f"died!, reward={total_rew}, fps={steps / duration:.2f}")
+    duration = time.perf_counter() - start
+    print(f"died!, reward={total_rew}, fps={steps / duration:.2f}")

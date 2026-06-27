@@ -112,7 +112,7 @@ class Settings:
         {
             "name": "spike",
             "shape": [SPIKE_SHAPE, SPIKE_KILLBOX],
-            "color": 0xFF00FF,
+            "color": 0x880088,
         },
         {
             "name": "jump_pad",
@@ -127,14 +127,17 @@ class Settings:
         {
             "name": "small_spike",
             "shape": [SMALL_SPIKE_SHAPE, SMALL_SPIKE_KILLBOX],
-            "color": 0xFF00FF,
+            "color": 0x880088,
         },
         {
             "name": "finish",
             "shape": [FINISH_SHAPE],
-            "color": 0x00B827,
+            "color": 0x22FF22,
         },
     ]
+    PLAYER_COLOR = 0xFF3333
+    GROUND_COLOR = 0x00FF00
+    BACKGROUND_COLOR = 0xCCCCCC
 
 
 class Camera:
@@ -448,6 +451,8 @@ class Game:
         if self.mode != Mode.NO_RENDER and self.keyJustPressed(pygame.K_e):
             self.editing = not self.editing
             self.reset()
+        if self.mode != Mode.NO_RENDER and self.keyJustPressed(pygame.K_r):
+            self.reset()
 
         if not self.editing and not self.player_dead and not self.player_win:
             self.updateInGame()
@@ -463,7 +468,7 @@ class Game:
 
         self.pixels = None
 
-        self.screen.fill("gray")
+        self.screen.fill(Settings.BACKGROUND_COLOR)
 
         if not self.editing:
             self.drawInGame()
@@ -483,9 +488,11 @@ class Game:
 
         surf = pygame.Surface(resolution)
         pygame.transform.scale(self.screen, resolution, surf)
+        pixels = pygame.surfarray.array3d(surf).astype(np.float32) / 255.0
         self.pixels = (
-            pygame.surfarray.array3d(surf).mean(axis=2).astype(np.float32) / 255.0
+            pixels[:, :, 0] * 0.216 + pixels[:, :, 1] * 0.715 + pixels[:, :, 2] * 0.072
         )
+
         return self.pixels
 
     def handleEvents(self):
@@ -557,13 +564,8 @@ class Game:
             pygame.draw.circle(self.screen, color, (center.x, center.y), rad)
 
     def updateInGame(self):
-        if self.mode != Mode.NO_RENDER:
-            pressed = pygame.key.get_pressed()
-            if self.keyJustPressed(pygame.K_r):
-                self.reset()
-
         jump_input = self.is_jumping or (
-            self.mode != Mode.NO_RENDER and pressed[pygame.K_SPACE]
+            self.mode != Mode.NO_RENDER and pygame.key.get_pressed()[pygame.K_SPACE]
         )
 
         if jump_input and self.on_ground():
@@ -587,8 +589,8 @@ class Game:
             ]
 
     def drawInGame(self):
-        self.drawObject(self.ground, 0x00FF00)
-        self.drawObject(self.player, 0xFF0000)
+        self.drawObject(self.ground, Settings.GROUND_COLOR)
+        self.drawObject(self.player, Settings.PLAYER_COLOR)
 
         for kind, obj in self.level:
             self.drawObject(obj, Settings.OBJECT_DATA[kind]["color"])
@@ -687,9 +689,9 @@ class Game:
             Settings.RESOLUTION[0],
             Settings.RESOLUTION[1] - ground_level,
         ]
-        pygame.draw.rect(self.screen, 0x00FF00, rect)
+        pygame.draw.rect(self.screen, Settings.GROUND_COLOR, rect)
 
-        self.drawObject(self.player, 0xFF0000)
+        self.drawObject(self.player, Settings.PLAYER_COLOR)
 
         start = b2Vec2(0, self.level.start.y)
         pts = [start + (0.2, 0), start + (0, 0.2), start - (0.2, 0), start - (0, 0.2)]
