@@ -1,9 +1,11 @@
+from enum import Enum
 import os
 import Box2D
-import pygame
 from Box2D import b2Vec2
 import math
 import numpy as np
+
+import pygame
 
 # TODO: win condition
 
@@ -308,21 +310,30 @@ class Level:
             yield (self.objs[obj.userData][0], obj)
 
 
+class Mode(Enum):
+    NORMAL = 0
+    HEADLESS = 1
+    NO_RENDER = 2
+
+
 class Game:
-    def __init__(self, headless=False):
-        if headless:
+    def __init__(self, mode: Mode = Mode.NORMAL):
+        if mode == Mode.HEADLESS:
             os.environ["SDL_VIDEODRIVER"] = "dummy"
         elif "SDL_VIDEODRIVER" in os.environ:
             os.environ.pop("SDL_VIDEODRIVER")
 
-        pygame.init()
-        self.headless = headless
-        self.screen = pygame.display.set_mode(Settings.RESOLUTION)
-        self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font(None, size=40)
+        self.mode = mode
+
+        if mode != Mode.NO_RENDER:
+            pygame.init()
+            self.screen = pygame.display.set_mode(Settings.RESOLUTION)
+            self.clock = pygame.time.Clock()
+            self.font = pygame.font.Font(None, size=40)
+            self.prev_frame_pressed = None
+            self.prev_frame_mouse = (False, False, False)
+
         self.running = True
-        self.prev_frame_pressed = None
-        self.prev_frame_mouse = (False, False, False)
 
         self.editing = False
         self.editor_placed_block: int = 0
@@ -331,7 +342,6 @@ class Game:
         self.dt = 1 / Settings.FPS  # fixed dt for stable env
 
         self.pixels = None
-        self.handled_events = False
 
     def reset(self, level_file=None):
         self.cam = Camera()
@@ -402,26 +412,32 @@ class Game:
         if not self.running:
             return
 
-        self.handleEvents()
+        if self.mode != Mode.NO_RENDER:
+            self.handleEvents()
+
         self.update()
-        self.render()
+
+        if self.mode != Mode.NO_RENDER:
+            self.render()
 
     def update(self):
-        if self.keyJustPressed(pygame.K_e):
+        if self.mode != Mode.NO_RENDER and self.keyJustPressed(pygame.K_e):
             self.editing = not self.editing
             self.reset()
 
         if not self.editing and not self.player_dead:
             self.updateInGame()
-        elif self.editing:
+        elif self.editing and self.mode != Mode.NO_RENDER:
             self.updateEditor()
 
-        self.prev_frame_pressed = pygame.key.get_pressed()
-        self.prev_frame_mouse = pygame.mouse.get_pressed()
+        if self.mode != Mode.NO_RENDER:
+            self.prev_frame_pressed = pygame.key.get_pressed()
+            self.prev_frame_mouse = pygame.mouse.get_pressed()
 
     def render(self):
+        assert self.mode != Mode.NO_RENDER
+
         self.pixels = None
-        self.handleEvents()
 
         self.screen.fill("gray")
 
@@ -432,11 +448,12 @@ class Game:
 
         pygame.display.flip()
 
-        if not self.headless:
+        if self.mode == Mode.NORMAL:
             self.clock.tick(Settings.FPS)
-        self.handled_events = False
 
     def getPixles(self, resolution):
+        assert self.mode != Mode.NO_RENDER
+
         if self.pixels is not None:
             return self.pixels
 
@@ -448,17 +465,17 @@ class Game:
         return self.pixels
 
     def handleEvents(self):
-        if self.handled_events:
-            return
+        assert self.mode != Mode.NO_RENDER
+
         for evt in pygame.event.get():
             if evt.type == pygame.QUIT:
                 self.running = False
-        self.handled_events = True
 
     def close(self):
         self.running = False
-        pygame.display.quit()
-        pygame.quit()
+        if self.mode != Mode.NO_RENDER:
+            pygame.display.quit()
+            pygame.quit()
 
     def jump(self):
         self.is_jumping = True
@@ -469,6 +486,32 @@ class Game:
     def on_ground(self):
         return self.player_on_ground != 0 or len(self.player_in_jump_orb) != 0
 
+    def raycast(self, direction, max_dist):
+        class Query(Box2D.b2RayCastCallback):
+            def __init__(self):
+                super().__init__()
+                self.first = None
+                self.dist = 1
+
+            def ReportFixture(self, fixture, _pt, _n, t):
+                if fixture.body.userData is None:
+                    return 1
+                if self.first is None or t < self.dist:
+                    self.first = fixture.body
+                    self.dist = t
+                return t
+
+        query = Query()
+        start: b2Vec2 = self.player.position
+        end: b2Vec2 = start + direction * max_dist
+        self.world.RayCast(query, start, end)
+
+        if not query.first:
+            return (1, 0)
+
+        kind = self.level.objs[query.first.userData][0]
+        return (query.dist, kind + 1)
+
     def drawObject(self, obj, color):
         shape = obj.fixtures[0].shape
         if isinstance(shape, Box2D.b2PolygonShape):
@@ -478,11 +521,16 @@ class Game:
             pygame.draw.polygon(self.screen, color, pts)
 
     def updateInGame(self):
-        pressed = pygame.key.get_pressed()
-        if self.keyJustPressed(pygame.K_r):
-            self.reset()
+        if self.mode != Mode.NO_RENDER:
+            pressed = pygame.key.get_pressed()
+            if self.keyJustPressed(pygame.K_r):
+                self.reset()
 
-        if (pressed[pygame.K_SPACE] or self.is_jumping) and self.on_ground():
+        jump_input = self.is_jumping or (
+            self.mode != Mode.NO_RENDER and pressed[pygame.K_SPACE]
+        )
+
+        if jump_input and self.on_ground():
             self.player.linearVelocity = (0, Settings.JUMP_VEL)
 
             if len(self.player_in_jump_orb) != 0:

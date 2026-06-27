@@ -1,9 +1,11 @@
+import math
+from Box2D import b2Vec2
 import gymnasium as gym
 
 import os
 import time
 
-from game import Game, Settings
+from game import Game, Settings, Mode
 
 
 class ObservationKind:
@@ -14,6 +16,7 @@ class ObservationKind:
         self.kind = None
         self.resolution = None
         self.max_sight = None
+        self.directions = None
 
         self.include_on_ground = False
         if "include_on_ground" in kwargs:
@@ -27,10 +30,19 @@ class ObservationKind:
         return s
 
     @staticmethod
-    def raycasts(count=16, max_sight=10, **kwargs):
+    def raycasts(count=16, spread=math.pi / 2, max_sight=10, **kwargs):
         s = ObservationKind(**kwargs)
         s.kind = ObservationKind.RAYCASTS
         s.resolution = count
+        s.max_sight = max_sight
+        s.directions = []
+
+        dt = spread / count
+        for i in range(count):
+            t = dt * (i - count // 2)
+            s.directions.append(b2Vec2(math.cos(t), math.sin(t)))
+
+        return s
 
     def space(self) -> gym.spaces.Dict:
         if self.kind == ObservationKind.PIXELS:
@@ -38,7 +50,7 @@ class ObservationKind:
         elif self.kind == ObservationKind.RAYCASTS:
             obj_count = len(Settings.OBJECT_DATA)
             d = {
-                "dists": gym.spaces.Box(0, 1, self.resolution),
+                "dists": gym.spaces.Box(0, 1, (self.resolution,)),
                 "hits": gym.spaces.MultiDiscrete(
                     [obj_count + 1 for _ in range(self.resolution)]
                 ),
@@ -53,19 +65,26 @@ class ObservationKind:
         if self.kind == ObservationKind.PIXELS:
             pixels = game.getPixles(self.resolution)
             d = {"pixels": pixels}
-            if self.include_on_ground:
-                d["on_ground"] = game.on_ground()
-
-            return d
         else:
-            raise Exception("todo: implement observation {}".format(self.kind))
+            d = {"hits": [], "dists": []}
+            for direction in self.directions:
+                (dist, kind) = game.raycast(direction, self.max_sight)
+                d["hits"].append(kind)
+                d["dists"].append(dist)
+
+        if self.include_on_ground:
+            d["on_ground"] = game.on_ground()
+        return d
 
 
 class GameEnv(gym.Env):
     metadata = {"render_modes": ["human"], "render_fps": Settings.FPS}
 
     def __init__(
-        self, render_mode=None, obs_kind=ObservationKind.pixels(), levels_dir="levels"
+        self,
+        render_mode=None,
+        obs_kind=ObservationKind.pixels(),
+        levels_dir="levels",
     ):
         super().__init__()
 
@@ -75,8 +94,16 @@ class GameEnv(gym.Env):
         self.obs_kind = obs_kind
         self.render_mode = render_mode
         self.levels_dir = levels_dir
-        # TODO: probably better to render the game at observed resolution straight away
-        self.game = Game(headless=self.render_mode is None)
+
+        mode: Mode = Mode.NORMAL
+
+        if self.render_mode is None:
+            mode = Mode.HEADLESS
+
+        if self.obs_kind.kind == ObservationKind.RAYCASTS and self.render_mode is None:
+            mode = Mode.NO_RENDER
+
+        self.game = Game(mode=mode)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -96,6 +123,7 @@ class GameEnv(gym.Env):
     def step(self, action):
         if action == 1:
             self.game.jump()
+
         self.game.run()
 
         obs = self.obs_kind.observe(self.game)
@@ -107,7 +135,10 @@ class GameEnv(gym.Env):
 
 
 if __name__ == "__main__":
-    env = GameEnv()
+    env = GameEnv(
+        obs_kind=ObservationKind.raycasts(include_on_ground=True),
+        render_mode="human",
+    )
 
     while True:
         obs, _ = env.reset()
