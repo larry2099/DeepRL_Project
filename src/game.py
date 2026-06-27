@@ -14,22 +14,18 @@ class Settings:
     JUMP_VEL = 1.9 * SPEED
     JUMP_PAD_VEL = 2.74 * SPEED
     FPS = 60
-
-    PLAYER_GRP = 1 << 0
-    GROUND_GRP = 1 << 1
-    KILL_GRP = 1 << 2
-    JUMP_PAD_GRP = 1 << 3
-    CHECKPOINT_GRP = 1 << 4
-
-    PLAYER_REACT_GRP = GROUND_GRP | KILL_GRP | JUMP_PAD_GRP | CHECKPOINT_GRP
-
     CAM_SPEED = 1e-2
     CAM_SPEED_FAST = 1e-1
     QUERY_SIZE = b2Vec2(0.1, 0.1)
     CAM_FOLLOW = 0
 
-    BLOCK = 0
-    SPIKE = 1
+    PLAYER_GRP = 1 << 0
+    GROUND_GRP = 1 << 1
+    KILL_GRP = 1 << 2
+    JUMP_PAD_GRP = 1 << 3
+    JUMP_ORB_GRP = 1 << 4
+
+    PLAYER_REACT_GRP = GROUND_GRP | KILL_GRP | JUMP_PAD_GRP | JUMP_ORB_GRP
 
     BLOCK_SHAPE = Box2D.b2FixtureDef(
         shape=Box2D.b2PolygonShape(box=(0.5, 0.5)),
@@ -79,7 +75,7 @@ class Settings:
         shape=Box2D.b2PolygonShape(box=(0.5, 0.5)),
         isSensor=True,
         filter=Box2D.b2Filter(
-            categoryBits=GROUND_GRP,
+            categoryBits=JUMP_ORB_GRP,
             maskBits=PLAYER_GRP,
         ),
     )
@@ -144,27 +140,37 @@ class Camera:
 
 
 class ContactListener(Box2D.b2ContactListener):
-    def __init__(self, game):
+    def __init__(self, game: "Game"):
         Box2D.b2ContactListener.__init__(self)
         self.game = game
 
     def BeginContact(self, contact):
         _, other = self.player_and_other(contact.fixtureA, contact.fixtureB)
 
-        if other.filterData.categoryBits & Settings.GROUND_GRP != 0:
+        bits = other.filterData.categoryBits
+        if bits & Settings.GROUND_GRP != 0:
             self.game.player_on_ground += 1
 
-        if other.filterData.categoryBits & Settings.KILL_GRP != 0:
+        if bits & Settings.KILL_GRP != 0:
             self.game.player_dead = True
 
-        if other.filterData.categoryBits & Settings.JUMP_PAD_GRP:
+        if bits & Settings.JUMP_PAD_GRP:
             self.game.player.linearVelocity = b2Vec2(0, Settings.JUMP_PAD_VEL)
+
+        if bits & Settings.JUMP_ORB_GRP:
+            self.game.player_in_jump_orb.add(other.body)
 
     def EndContact(self, contact):
         _, other = self.player_and_other(contact.fixtureA, contact.fixtureB)
+        bits = other.filterData.categoryBits
 
-        if other.filterData.categoryBits & Settings.GROUND_GRP != 0:
+        if bits & Settings.GROUND_GRP != 0:
             self.game.player_on_ground -= 1
+
+        if bits & Settings.JUMP_ORB_GRP:
+            orb = other.body
+            if orb in self.game.player_in_jump_orb:
+                self.game.player_in_jump_orb.remove(orb)
 
     def player_and_other(self, f1, f2):
         if f1.body == self.game.player:
@@ -333,6 +339,7 @@ class Game:
         self.cam = Camera()
 
         self.player_on_ground = 0
+        self.player_in_jump_orb = set()
         self.player_dead = False
 
         self.world = Box2D.b2World(
@@ -418,8 +425,15 @@ class Game:
     def updateInGame(self):
         if self.keyJustPressed(pygame.K_r):
             self.reset()
-        if pygame.key.get_pressed()[pygame.K_SPACE] and self.player_on_ground != 0:
+        if pygame.key.get_pressed()[pygame.K_SPACE] and (
+            self.player_on_ground != 0 or len(self.player_in_jump_orb) != 0
+        ):
+            if len(self.player_in_jump_orb) != 0:
+                orb = self.player_in_jump_orb.pop()
+                orb.fixtures[1].filterData.categoryBits &= ~Settings.JUMP_ORB_GRP
+
             self.player.linearVelocity = (0, Settings.JUMP_VEL)
+
         self.world.Step(self.dt, 10, 10)
 
         self.cam.target_offset += Settings.CAM_FOLLOW * (
@@ -484,8 +498,9 @@ class Game:
             math.floor(p_break.y + 0.5),
         )
 
-        if self.keyJustPressed(pygame.K_z):
-            self.level.start = p_place
+        # accidentally pressing it sometimes messes stuff up for some reason
+        # if self.keyJustPressed(pygame.K_z):
+        #     self.level.start = p_place
 
         if lmb and not shift:
             self.level.deselect()
@@ -584,6 +599,6 @@ class Game:
 
 
 if __name__ == "__main__":
-    g = Game("levels/2.txt")
+    g = Game("levels/3.txt")
     while g.running:
         g.run()
