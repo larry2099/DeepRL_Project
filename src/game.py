@@ -10,8 +10,8 @@ class Settings:
     SCALE = 30
     RESOLUTION = (800, 600)
     SPEED = 9.6
-    GRAVITY = 71.88
-    JUMP_VEL = 15.89
+    GRAVITY = 2 * 0.43 * SPEED * SPEED
+    JUMP_VEL = 1.9 * SPEED
     JUMP_PAD_VEL = 28.0
     FPS = 60
 
@@ -26,7 +26,7 @@ class Settings:
     CAM_SPEED = 1e-2
     CAM_SPEED_FAST = 1e-1
     QUERY_SIZE = b2Vec2(0.1, 0.1)
-    CAM_FOLLOW = 1e-2
+    CAM_FOLLOW = 0
 
     BLOCK = 0
     SPIKE = 1
@@ -472,6 +472,8 @@ class Game:
             selection_move_delta *= 0.1
         for obj in self.level.selection:
             obj.position += selection_move_delta
+            self.level.objs[obj.userData][1] = obj.position.x
+            self.level.objs[obj.userData][2] = obj.position.y
 
         (lmb, _, rmb) = self.mouseJustPressed()
         x, y = pygame.mouse.get_pos()
@@ -582,6 +584,6 @@ class Game:
 
 
 if __name__ == "__main__":
-    g = Game("lvl1.txt")
+    g = Game("levels/2.txt")
     while g.running:
         g.run()
