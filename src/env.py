@@ -52,7 +52,8 @@ class ObservationKind:
             d = {
                 "dists": gym.spaces.Box(0, 1, (self.resolution,)),
                 "hits": gym.spaces.MultiDiscrete(
-                    [obj_count + 1 for _ in range(self.resolution)]
+                    [obj_count + 2 for _ in range(self.resolution)],
+                    start=[-1 for _ in range(self.resolution)],
                 ),
             }
 
@@ -103,7 +104,14 @@ class GameEnv(gym.Env):
         if self.obs_kind.kind == ObservationKind.RAYCASTS and self.render_mode is None:
             mode = Mode.NO_RENDER
 
-        self.game = Game(mode=mode)
+        if self.obs_kind.kind == ObservationKind.RAYCASTS:
+            self.game = Game(
+                mode=mode,
+                draw_ray_dirs=self.obs_kind.directions,
+                draw_ray_dist=self.obs_kind.max_sight,
+            )
+        else:
+            self.game = Game(mode=mode)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -123,7 +131,6 @@ class GameEnv(gym.Env):
     def step(self, action):
         if action == 1:
             self.game.jump()
-
         self.game.run()
 
         obs = self.obs_kind.observe(self.game)

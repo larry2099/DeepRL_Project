@@ -317,7 +317,12 @@ class Mode(Enum):
 
 
 class Game:
-    def __init__(self, mode: Mode = Mode.NORMAL):
+    def __init__(
+        self,
+        mode: Mode = Mode.NORMAL,
+        draw_ray_dirs=None,
+        draw_ray_dist=None,
+    ):
         if mode == Mode.HEADLESS:
             os.environ["SDL_VIDEODRIVER"] = "dummy"
         elif "SDL_VIDEODRIVER" in os.environ:
@@ -332,6 +337,9 @@ class Game:
             self.font = pygame.font.Font(None, size=40)
             self.prev_frame_pressed = None
             self.prev_frame_mouse = (False, False, False)
+            self.draw_ray_dirs = draw_ray_dirs
+            self.draw_ray_dist = draw_ray_dist
+            self.rays = []
 
         self.running = True
 
@@ -488,26 +496,31 @@ class Game:
 
     def raycast(self, direction, max_dist):
         class Query(Box2D.b2RayCastCallback):
-            def __init__(self):
+            def __init__(self, ground):
                 super().__init__()
                 self.first = None
                 self.dist = 1
+                self.ground = ground
 
             def ReportFixture(self, fixture, _pt, _n, t):
-                if fixture.body.userData is None:
+                if fixture.body.userData is None and fixture.body != self.ground:
                     return 1
+
                 if self.first is None or t < self.dist:
                     self.first = fixture.body
                     self.dist = t
                 return t
 
-        query = Query()
+        query = Query(self.ground)
         start: b2Vec2 = self.player.position
         end: b2Vec2 = start + direction * max_dist
         self.world.RayCast(query, start, end)
 
         if not query.first:
-            return (1, 0)
+            return (1, -1)
+
+        if query.first == self.ground:
+            return (query.dist, 0)
 
         kind = self.level.objs[query.first.userData][0]
         return (query.dist, kind + 1)
@@ -545,12 +558,34 @@ class Game:
 
         self.is_jumping = False
 
+        if self.mode != Mode.NO_RENDER and self.draw_ray_dirs is not None:
+            self.rays = [
+                self.raycast(d, self.draw_ray_dist) for d in self.draw_ray_dirs
+            ]
+
     def drawInGame(self):
         self.drawObject(self.ground, 0x00FF00)
         self.drawObject(self.player, 0xFF0000)
 
         for kind, obj in self.level:
             self.drawObject(obj, Settings.OBJECT_DATA[kind]["color"])
+
+        self.drawRays()
+
+    def drawRays(self):
+        if self.draw_ray_dirs is None:
+            return
+        a = self.cam.apply(self.player.position)
+        for (t, k), d in zip(self.rays, self.draw_ray_dirs):
+            b = self.player.position + t * d * self.draw_ray_dist
+            b = self.cam.apply(b)
+            if k == -1:
+                col = 0x333333
+            elif k == 0:
+                col = 0x00FF00
+            else:
+                col = Settings.OBJECT_DATA[k - 1]["color"]
+            pygame.draw.line(self.screen, col, (a.x, a.y), (b.x, b.y))
 
     def updateEditor(self):
         dt = self.clock.get_time()
