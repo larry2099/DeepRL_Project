@@ -1,6 +1,7 @@
 import math
 from Box2D import b2Vec2
 import gymnasium as gym
+import numpy as np
 
 import os
 import time
@@ -18,15 +19,22 @@ class ObservationKind:
         self.max_sight = None
         self.directions = None
 
+        self.frame_count: int = 1
         self.include_on_ground = False
+        self.frames = {}
+
         if "include_on_ground" in kwargs:
             self.include_on_ground = kwargs["include_on_ground"]
+        if "frame_count" in kwargs:
+            self.frame_count = kwargs["frame_count"]
+        self.counter = 0
 
     @staticmethod
     def pixels(resolution=(160, 120), **kwargs):
         s = ObservationKind(**kwargs)
         s.kind = ObservationKind.PIXELS
         s.resolution = resolution
+        s.frames = s.space().sample((s.frame_count, None))
         return s
 
     @staticmethod
@@ -42,16 +50,19 @@ class ObservationKind:
             t = dt * (i - count // 2)
             s.directions.append(b2Vec2(math.cos(t), math.sin(t)))
 
+        s.frames = s.space().sample((s.frame_count, None))
+
         return s
 
-    def space(self) -> gym.spaces.Dict:
+    def space(self):
         if self.kind == ObservationKind.PIXELS:
             d = {"pixels": gym.spaces.Box(0, 1, self.resolution)}
         elif self.kind == ObservationKind.RAYCASTS:
             obj_count = len(Settings.OBJECT_DATA)
+
             d = {
                 "dists": gym.spaces.Box(0, 1, (self.resolution,)),
-                "hits": gym.spaces.MultiDiscrete(
+                "kinds": gym.spaces.MultiDiscrete(
                     [obj_count + 2 for _ in range(self.resolution)],
                     start=[-1 for _ in range(self.resolution)],
                 ),
@@ -60,22 +71,31 @@ class ObservationKind:
         if self.include_on_ground:
             d["on_ground"] = gym.spaces.Discrete(2)
 
-        return gym.spaces.Dict(d)
+        return gym.spaces.Sequence(gym.spaces.Dict(d), stack=True)
 
     def observe(self, game: Game):
+        i = self.counter % self.frame_count
+        self.counter += 1
+
         if self.kind == ObservationKind.PIXELS:
             pixels = game.getPixles(self.resolution)
-            d = {"pixels": pixels}
+            self.frames["pixels"][i] = pixels
         else:
-            d = {"hits": [], "dists": []}
+            dists = []
+            kinds = []
+
             for direction in self.directions:
                 (dist, kind) = game.raycast(direction, self.max_sight)
-                d["hits"].append(kind)
-                d["dists"].append(dist)
+                dists.append(dist)
+                kinds.append(kind)
+
+            self.frames["dists"][i] = np.array(dists, dtype=np.float32)
+            self.frames["kinds"][i] = np.array(kinds, dtype=np.int64)
 
         if self.include_on_ground:
-            d["on_ground"] = game.on_ground()
-        return d
+            self.frames["on_ground"][i] = game.on_ground()
+
+        return self.frames
 
 
 class GameEnv(gym.Env):
@@ -135,7 +155,9 @@ class GameEnv(gym.Env):
 
         obs = self.obs_kind.observe(self.game)
         reward = 1.0 if not self.game.is_dead() else 0.0
-        return obs, reward, self.game.is_dead() or not self.game.running, False, {}
+        term = self.game.is_dead() or not self.game.running
+
+        return obs, reward, term, False, {}
 
     def close(self):
         self.game.close()
@@ -149,25 +171,32 @@ You can configure the env to collect 2 different kinds of observations:
     can be changed using the 'resolution' param of the constructor.
     Runs at 100fps on my machine.
 
-    - ObservationKind.raycast: 'count' rays get shot out of the player, 
+    - ObservationKind.raycast: 'count' rays get shot out of the player,
+    in an angle of 'spread' (i.e. if spread=pi/2, the total view angle is 90deg)
     they record the first object they hit (-1 = no hit, 0 = ground, 
-    1.. = object types such as block, spike, ...) + distance.
+    1.. = object types such as block, spike, ...) and normalized distance.
     Runs at 1500fps on my machine.
 
-Both kinds also accept a 'include_on_ground' parameter, if it's set to True
-the observation will also include if the player can currently jump or not 
-(i.e. on ground, or intersecting a jump orb, ...)
+Both kinds also accept optional parameters:
+    - include_on_ground: (default=False) add an on_ground field to 
+    the observations i.e. is the player on ground, or able to use a 
+    jump orb.
+    
+    - frame_count: (default=1) how many frames worth of observations 
+    to keep. For example we can keep 4 previous frames of pixels, or 
+    4 previous raycast results
 
 You can set render_mode to "human" (default is None), then there will 
 be a pygame window. In human mode the game is locked to 60fps.
 
+GameEnv.reset() by default picks a random level every time, you can pass an 
+optional parameter 'level' to pick a specific level.
+
 """
 
 if __name__ == "__main__":
-    env = GameEnv(
-        obs_kind=ObservationKind.raycasts(include_on_ground=True),
-        render_mode="human",
-    )
+    obs_kind = ObservationKind.raycasts(include_on_ground=True, frame_count=4)
+    env = GameEnv(obs_kind=obs_kind, render_mode="human")
 
     while True:
         obs, _ = env.reset()
