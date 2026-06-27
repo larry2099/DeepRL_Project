@@ -3,6 +3,10 @@ import pygame
 from Box2D import b2Vec2
 import math
 
+# TODO: fractional object positions
+# TODO: follow cam vertically
+# TODO: build some levels
+
 
 class Settings:
     SCALE = 30
@@ -17,10 +21,12 @@ class Settings:
     GROUND_GRP = 1 << 1
     KILL_GRP = 1 << 2
     JUMP_PAD_GRP = 1 << 3
+    CHECKPOINT_GRP = 1 << 4
 
-    PLAYER_REACT_GRP = GROUND_GRP | KILL_GRP | JUMP_PAD_GRP
+    PLAYER_REACT_GRP = GROUND_GRP | KILL_GRP | JUMP_PAD_GRP | CHECKPOINT_GRP
 
     CAM_SPEED = 1e-2
+    CAM_SPEED_FAST = 1e-1
     QUERY_SIZE = b2Vec2(0.1, 0.1)
 
     BLOCK = 0
@@ -31,7 +37,7 @@ class Settings:
         isSensor=True,
     )
     BLOCK_GROUND = Box2D.b2FixtureDef(
-        shape=Box2D.b2EdgeShape(vertex1=(-0.5, 0.5), vertex2=(0.5, 0.5)),
+        shape=Box2D.b2EdgeShape(vertex1=(-0.48, 0.5), vertex2=(0.5, 0.5)),
         friction=0,
         filter=Box2D.b2Filter(
             categoryBits=GROUND_GRP,
@@ -39,7 +45,7 @@ class Settings:
         ),
     )
     BLOCK_KILLBOX = Box2D.b2FixtureDef(
-        shape=Box2D.b2PolygonShape(box=(0.5, 0.2)),
+        shape=Box2D.b2PolygonShape(box=(0.48, 0.2)),
         isSensor=True,
         filter=Box2D.b2Filter(
             categoryBits=KILL_GRP,
@@ -67,7 +73,7 @@ class Settings:
         ),
     )
     JUMP_ORB_SHAPE = Box2D.b2FixtureDef(
-        shape=Box2D.b2PolygonShape(box=(0.2, 0.2)),
+        shape=Box2D.b2PolygonShape(box=(0.2, 0.2, (0, 0), math.pi / 4)),
         isSensor=True,
     )
     JUMP_ORB_HITBOX = Box2D.b2FixtureDef(
@@ -171,10 +177,17 @@ class Level:
     def __init__(self):
         self.objs = []
         self.freelist = []
+        self.start = b2Vec2(0, 0)
         self.world: Box2D.b2World | None = None
         self.bodies = set()
 
     def deserialize(self, s: str):
+        a = s.split("!")
+        vals = a[0].split(",")
+        self.start.x = float(vals[0])
+        self.start.y = float(vals[1])
+
+        s = a[1]
         for obj in s.split(";"):
             a = obj.split(":")
             if len(a) != 2:
@@ -186,7 +199,8 @@ class Level:
             self.objs.append([int(kind), float(x), float(y)])
 
     def serialize(self):
-        s = ""
+        s = "{},{}!".format(self.start.x, self.start.y)
+
         for obj in self.objs:
             if len(obj) == 0:
                 continue
@@ -207,7 +221,7 @@ class Level:
         assert self.world
 
         o = self.world.CreateKinematicBody(
-            position=(obj[1], obj[2]),
+            position=(obj[1] - self.start.x, obj[2]),
             linearVelocity=(-Settings.SPEED, 0),
             fixtures=Settings.OBJECT_DATA[obj[0]]["shape"],
             userData=idx,
@@ -271,7 +285,7 @@ class Game:
         self.level = Level()
         if level_file is None:
             level_file = "lvl1.txt"
-            self.level.deserialize("0:10,0;0:12,0;0:12,1;0:12,2;")
+            self.level.deserialize("0,0!0:10,0;0:12,0;0:12,1;0:12,2;")
         else:
             with open(level_file, "r") as f:
                 self.level.deserialize(f.read())
@@ -313,7 +327,7 @@ class Game:
 
         anchor = self.world.CreateStaticBody(position=(0, 0))
         self.player = self.world.CreateDynamicBody(
-            position=(0, 0),
+            position=(0, self.level.start.y),
             fixedRotation=True,
             fixtures=[
                 Box2D.b2FixtureDef(  # shape
@@ -394,15 +408,20 @@ class Game:
     def updateEditor(self):
         dt = self.clock.get_time()
 
-        if pygame.key.get_mods() & pygame.KMOD_CTRL == 0:
+        shift = pygame.key.get_mods() & pygame.KMOD_SHIFT != 0
+        ctrl = pygame.key.get_mods() & pygame.KMOD_CTRL != 0
+
+        cam_speed = Settings.CAM_SPEED if not shift else Settings.CAM_SPEED_FAST
+
+        if not ctrl:
             if pygame.key.get_pressed()[pygame.K_a]:
-                self.cam.world_offset += Settings.CAM_SPEED * dt * b2Vec2(1, 0)
+                self.cam.world_offset += cam_speed * dt * b2Vec2(1, 0)
             if pygame.key.get_pressed()[pygame.K_d]:
-                self.cam.world_offset += Settings.CAM_SPEED * dt * b2Vec2(-1, 0)
+                self.cam.world_offset += cam_speed * dt * b2Vec2(-1, 0)
             if pygame.key.get_pressed()[pygame.K_w]:
-                self.cam.world_offset += Settings.CAM_SPEED * dt * b2Vec2(0, -1)
+                self.cam.world_offset += cam_speed * dt * b2Vec2(0, -1)
             if pygame.key.get_pressed()[pygame.K_s]:
-                self.cam.world_offset += Settings.CAM_SPEED * dt * b2Vec2(0, 1)
+                self.cam.world_offset += cam_speed * dt * b2Vec2(0, 1)
         else:
             if self.keyJustPressed(pygame.K_s):
                 with open(self.level_file, "w") as f:
@@ -410,13 +429,20 @@ class Game:
 
         (lmb, _, rmb) = self.mouseJustPressed()
         x, y = pygame.mouse.get_pos()
-        p = self.cam.applyInv(b2Vec2(x, y))
+
+        p_break = self.cam.applyInv(b2Vec2(x, y))
+        p_place = b2Vec2(
+            math.floor(p_break.x + self.level.start.x + 0.5),
+            math.floor(p_break.y + 0.5),
+        )
+
+        if self.keyJustPressed(pygame.K_z):
+            self.level.start = p_place
 
         if lmb:
-            p = b2Vec2(math.floor(p.x + 0.5), math.floor(p.y + 0.5))
-            self.level.place(self.editor_selected, p)
+            self.level.place(self.editor_selected, p_place)
         elif rmb:
-            self.level.erase(p)
+            self.level.erase(p_break)
 
         for i, k in enumerate(range(pygame.K_0, pygame.K_9 + 1)):
             if self.keyJustPressed(k) and len(Settings.OBJECT_DATA) > i:
@@ -433,6 +459,12 @@ class Game:
         pygame.draw.rect(self.screen, 0x00FF00, rect)
 
         self.drawObject(self.player, 0xFF0000)
+
+        start = b2Vec2(0, self.level.start.y)
+        pts = [start + (0.2, 0), start + (0, 0.2), start - (0.2, 0), start - (0, 0.2)]
+        pts = [self.cam.apply(p) for p in pts]
+        pts = [(p.x, p.y) for p in pts]
+        pygame.draw.polygon(self.screen, 0x00B827, pts)
 
         for kind, obj in self.level:
             self.drawObject(obj, Settings.OBJECT_DATA[kind]["color"])
