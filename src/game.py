@@ -3,7 +3,6 @@ import pygame
 from Box2D import b2Vec2
 import math
 
-# TODO: follow cam vertically
 # TODO: build some levels
 
 
@@ -27,6 +26,7 @@ class Settings:
     CAM_SPEED = 1e-2
     CAM_SPEED_FAST = 1e-1
     QUERY_SIZE = b2Vec2(0.1, 0.1)
+    CAM_FOLLOW = 1e-2
 
     BLOCK = 0
     SPIKE = 1
@@ -129,17 +129,18 @@ class Camera:
     def __init__(self):
         self.scale = Settings.SCALE
         self.world_offset = b2Vec2(-5, -6)
+        self.target_offset = b2Vec2(0, 0)
         self.pix_offset = b2Vec2(Settings.RESOLUTION[0] / 2, Settings.RESOLUTION[1] / 2)
 
     def apply(self, xy: b2Vec2) -> b2Vec2:
-        xy = (xy + self.world_offset) * self.scale
+        xy = (xy + self.world_offset - self.target_offset) * self.scale
         xy[1] *= -1
         return xy + self.pix_offset
 
     def applyInv(self, xy: b2Vec2) -> b2Vec2:
         xy -= self.pix_offset
         xy[1] *= -1
-        return xy / self.scale - self.world_offset
+        return xy / self.scale - self.world_offset + self.target_offset
 
 
 class ContactListener(Box2D.b2ContactListener):
@@ -420,6 +421,10 @@ class Game:
         if pygame.key.get_pressed()[pygame.K_SPACE] and self.player_on_ground != 0:
             self.player.linearVelocity = (0, Settings.JUMP_VEL)
         self.world.Step(self.dt, 10, 10)
+
+        self.cam.target_offset += Settings.CAM_FOLLOW * (
+            self.player.position - self.cam.target_offset
+        )
 
         if self.player_dead:
             self.reset()
