@@ -3,7 +3,6 @@ import pygame
 from Box2D import b2Vec2
 import math
 
-# TODO: fractional object positions
 # TODO: follow cam vertically
 # TODO: build some levels
 
@@ -181,6 +180,8 @@ class Level:
         self.world: Box2D.b2World | None = None
         self.bodies = set()
 
+        self.selection = set()
+
     def deserialize(self, s: str):
         a = s.split("!")
         vals = a[0].split(",")
@@ -269,6 +270,30 @@ class Level:
             self.objs[idx] = []
             self.world.DestroyBody(query.obj)
 
+    def select(self, a: b2Vec2, b: b2Vec2):
+        assert self.world
+
+        class Query(Box2D.b2QueryCallback):
+            def __init__(self):
+                super().__init__()
+                self.objs = set()
+
+            def ReportFixture(self, fixture):
+                if fixture.body.userData is not None:
+                    self.objs.add(fixture.body)
+                return True
+
+        aabb = Box2D.b2AABB(
+            lowerBound=b2Vec2(min(a.x, b.x), min(a.y, b.y)),
+            upperBound=b2Vec2(max(a.x, b.x), max(a.y, b.y)),
+        )
+        query = Query()
+        self.world.QueryAABB(query, aabb)
+        self.selection = self.selection.union(query.objs)
+
+    def deselect(self):
+        self.selection.clear()
+
     def __iter__(self):
         for obj in self.bodies:
             yield (self.objs[obj.userData][0], obj)
@@ -298,7 +323,8 @@ class Game:
         self.prev_frame_mouse = (False, False, False)
 
         self.editing = False
-        self.editor_selected: int = 0
+        self.editor_placed_block: int = 0
+        self.editor_select_start = None
 
         self.dt = 1 / Settings.FPS  # fixed dt for stable env
 
@@ -412,20 +438,35 @@ class Game:
         ctrl = pygame.key.get_mods() & pygame.KMOD_CTRL != 0
 
         cam_speed = Settings.CAM_SPEED if not shift else Settings.CAM_SPEED_FAST
+        pressed = pygame.key.get_pressed()
 
         if not ctrl:
-            if pygame.key.get_pressed()[pygame.K_a]:
+            if pressed[pygame.K_a]:
                 self.cam.world_offset += cam_speed * dt * b2Vec2(1, 0)
-            if pygame.key.get_pressed()[pygame.K_d]:
+            if pressed[pygame.K_d]:
                 self.cam.world_offset += cam_speed * dt * b2Vec2(-1, 0)
-            if pygame.key.get_pressed()[pygame.K_w]:
+            if pressed[pygame.K_w]:
                 self.cam.world_offset += cam_speed * dt * b2Vec2(0, -1)
-            if pygame.key.get_pressed()[pygame.K_s]:
+            if pressed[pygame.K_s]:
                 self.cam.world_offset += cam_speed * dt * b2Vec2(0, 1)
         else:
             if self.keyJustPressed(pygame.K_s):
                 with open(self.level_file, "w") as f:
                     f.write(self.level.serialize())
+
+        selection_move_delta = b2Vec2(0, 0)
+        if self.keyJustPressed(pygame.K_UP):
+            selection_move_delta.y += 1
+        if self.keyJustPressed(pygame.K_DOWN):
+            selection_move_delta.y -= 1
+        if self.keyJustPressed(pygame.K_LEFT):
+            selection_move_delta.x -= 1
+        if self.keyJustPressed(pygame.K_RIGHT):
+            selection_move_delta.x += 1
+        if shift:
+            selection_move_delta *= 0.1
+        for obj in self.level.selection:
+            obj.position += selection_move_delta
 
         (lmb, _, rmb) = self.mouseJustPressed()
         x, y = pygame.mouse.get_pos()
@@ -439,14 +480,22 @@ class Game:
         if self.keyJustPressed(pygame.K_z):
             self.level.start = p_place
 
-        if lmb:
-            self.level.place(self.editor_selected, p_place)
+        if lmb and not shift:
+            self.level.deselect()
+            self.level.place(self.editor_placed_block, p_place)
         elif rmb:
+            self.level.deselect()
             self.level.erase(p_break)
+        elif lmb and shift:
+            self.editor_select_start = p_break
+
+        if self.mouseJustReleased()[0] and self.editor_select_start is not None:
+            self.level.select(self.editor_select_start, p_break)
+            self.editor_select_start = None
 
         for i, k in enumerate(range(pygame.K_0, pygame.K_9 + 1)):
             if self.keyJustPressed(k) and len(Settings.OBJECT_DATA) > i:
-                self.editor_selected = i
+                self.editor_placed_block = i
 
     def drawEditor(self):
         ground_level = self.cam.apply(b2Vec2(0, -0.5))[1]
@@ -467,7 +516,10 @@ class Game:
         pygame.draw.polygon(self.screen, 0x00B827, pts)
 
         for kind, obj in self.level:
-            self.drawObject(obj, Settings.OBJECT_DATA[kind]["color"])
+            col = Settings.OBJECT_DATA[kind]["color"]
+            if obj in self.level.selection:
+                col |= 0x00FF00
+            self.drawObject(obj, col)
 
         self.drawGrid()
 
@@ -475,7 +527,7 @@ class Game:
             text = self.font.render(
                 f"[{i}]{desc['name']}",
                 True,
-                0xFFFF00 if i != self.editor_selected else 0xFF0000,
+                0xFFFF00 if i != self.editor_placed_block else 0xFF0000,
             )
             self.screen.blit(text, (0, i * 30))
 
@@ -517,6 +569,11 @@ class Game:
         (lmb, mmb, rmb) = pygame.mouse.get_pressed()
         (a, b, c) = self.prev_frame_mouse
         return (lmb and not a, mmb and not b, rmb and not c)
+
+    def mouseJustReleased(self):
+        (lmb, mmb, rmb) = pygame.mouse.get_pressed()
+        (a, b, c) = self.prev_frame_mouse
+        return (not lmb and a, not mmb and b, not rmb and c)
 
 
 if __name__ == "__main__":
