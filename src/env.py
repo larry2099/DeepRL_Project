@@ -141,6 +141,28 @@ class GameEnv(gym.Env):
         self.game.close()
 
 
+""" 
+Env usage
+
+You can configure the env to collect 2 different kinds of observations:
+    - ObservationKind.pixels: default, 2d grayscale image, resolution 
+    can be changed using the 'resolution' param of the constructor.
+    Runs at 100fps on my machine.
+
+    - ObservationKind.raycast: 'count' rays get shot out of the player, 
+    they record the first object they hit (-1 = no hit, 0 = ground, 
+    1.. = object types such as block, spike, ...) + distance.
+    Runs at 1500fps on my machine.
+
+Both kinds also accept a 'include_on_ground' parameter, if it's set to True
+the observation will also include if the player can currently jump or not 
+(i.e. on ground, or intersecting a jump orb, ...)
+
+You can set render_mode to "human" (default is None), then there will 
+be a pygame window. In human mode the game is locked to 60fps.
+
+"""
+
 if __name__ == "__main__":
     env = GameEnv(
         obs_kind=ObservationKind.raycasts(include_on_ground=True),
