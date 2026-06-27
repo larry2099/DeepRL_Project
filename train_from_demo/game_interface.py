@@ -15,20 +15,35 @@ class GameInterface:
             self.hwnd = windows[0]._hWnd
             print(f"✅ Attached to existing game window: '{self.target_title}'")
             self._activate_window()
+            return True
         else:
-            raise RuntimeError(f"❌ Could not find window with title '{self.target_title}'. Please open Geometry Dash manually (windowed mode) and run again.")
+            print(f"❌ Could not find window with title '{self.target_title}'.")
+            self.hwnd = None
+            return False
 
     def _activate_window(self):
         if self.hwnd:
-            win32gui.ShowWindow(self.hwnd, win32con.SW_RESTORE)
-            win32gui.SetForegroundWindow(self.hwnd)
-            time.sleep(0.2)
+            try:
+                win32gui.ShowWindow(self.hwnd, win32con.SW_RESTORE)
+                win32gui.SetForegroundWindow(self.hwnd)
+            except Exception as e:
+                print(f"⚠️ Window activation failed: {e}")
+            time.sleep(0.3)
+
+    def move_window(self, x, y, width, height):
+        if self.hwnd:
+            try:
+                win32gui.MoveWindow(self.hwnd, x, y, width, height, True)
+            except:
+                pass
 
     def get_window_rect(self):
         if self.hwnd:
-            return win32gui.GetWindowRect(self.hwnd)
+            try:
+                return win32gui.GetWindowRect(self.hwnd)
+            except:
+                return None
         return None
 
     def close(self):
-        # Do not close the game – leave it open for the user
         pass
