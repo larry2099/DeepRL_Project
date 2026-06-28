@@ -54,6 +54,38 @@ class ObservationKind:
 
         return s
 
+    # def space(self):
+    #     if self.kind == ObservationKind.PIXELS:
+    #         d = {
+    #             "pixels": gym.spaces.Box(
+    #                 0, 1, (self.frame_count, self.resolution[0], self.resolution[1])
+    #             )
+    #         }
+    #
+    #     elif self.kind == ObservationKind.RAYCASTS:
+    #         obj_count = len(Settings.OBJECT_DATA)
+    #         counts = np.array(
+    #             [
+    #                 [obj_count + 2 for _ in range(self.resolution)]
+    #                 for _ in range(self.frame_count)
+    #             ]
+    #         )
+    #         starts = np.array(
+    #             [[-1 for _ in range(self.resolution)] for _ in range(self.frame_count)]
+    #         )
+    #
+    #         d = {
+    #             "dists": gym.spaces.Box(0, 1, (self.frame_count, self.resolution)),
+    #             "kinds": gym.spaces.MultiDiscrete(counts, start=starts),
+    #         }
+    #
+    #     if self.include_on_ground:
+    #         d["on_ground"] = gym.spaces.MultiDiscrete(
+    #             [2 for _ in range(self.frame_count)]
+    #         )
+    #
+    #     return gym.spaces.Dict(d)
+
     def space(self):
         if self.kind == ObservationKind.PIXELS:
             d = {
@@ -64,19 +96,15 @@ class ObservationKind:
 
         elif self.kind == ObservationKind.RAYCASTS:
             obj_count = len(Settings.OBJECT_DATA)
-            counts = np.array(
-                [
-                    [obj_count + 2 for _ in range(self.resolution)]
-                    for _ in range(self.frame_count)
-                ]
-            )
-            starts = np.array(
-                [[-1 for _ in range(self.resolution)] for _ in range(self.frame_count)]
-            )
-
+            # Kinds: -1 (no hit), 0 (ground), 1..obj_count (object types)
             d = {
                 "dists": gym.spaces.Box(0, 1, (self.frame_count, self.resolution)),
-                "kinds": gym.spaces.MultiDiscrete(counts, start=starts),
+                "kinds": gym.spaces.Box(
+                    low=-1,
+                    high=obj_count,
+                    shape=(self.frame_count, self.resolution),
+                    dtype=np.int64
+                ),
             }
 
         if self.include_on_ground:
