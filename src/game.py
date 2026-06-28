@@ -385,6 +385,7 @@ class Game:
                 self.level.deserialize(f.read())
 
         self.level_file = level_file
+        pygame.display.set_caption(self.level_file)
 
         self.player_on_ground = 0
         self.player_in_jump_orb = set()
@@ -661,8 +662,8 @@ class Game:
         )
 
         # accidentally pressing it sometimes messes stuff up for some reason
-        # if self.keyJustPressed(pygame.K_z):
-        #     self.level.start = p_place
+        if self.keyJustPressed(pygame.K_z):
+            self.level.start = p_place
 
         if lmb and not shift:
             self.level.deselect()
@@ -762,6 +763,6 @@ class Game:
 
 if __name__ == "__main__":
     g = Game()
-    g.reset("levels/3.txt")
+    g.reset("levels/3-5.txt")
     while g.running:
         g.run()
