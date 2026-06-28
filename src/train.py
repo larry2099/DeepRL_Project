@@ -12,9 +12,11 @@ model = SB3.PPO(
     env,
     verbose=1,
     device="cpu",
+    tensorboard_log="./log/",
 )
+
 try:
-    model.learn(total_timesteps=1_000_000)
+    model.learn(total_timesteps=10_000_000)
 except (KeyboardInterrupt, Exception) as e:
     traceback.print_exception(e)
 finally:
