@@ -340,6 +340,7 @@ class Game:
         mode: Mode = Mode.NORMAL,
         draw_ray_dirs=None,
         draw_ray_dist=None,
+        draw_ray_offset=None,
     ):
         if mode == Mode.HEADLESS:
             os.environ["SDL_VIDEODRIVER"] = "dummy"
@@ -355,8 +356,10 @@ class Game:
             self.font = pygame.font.Font(None, size=40)
             self.prev_frame_pressed = None
             self.prev_frame_mouse = (False, False, False)
+
             self.draw_ray_dirs = draw_ray_dirs
             self.draw_ray_dist = draw_ray_dist
+            self.draw_ray_offset = draw_ray_offset
             self.rays = []
 
         self.running = True
@@ -521,7 +524,7 @@ class Game:
     def on_ground(self):
         return self.player_on_ground != 0 or len(self.player_in_jump_orb) != 0
 
-    def raycast(self, direction, max_dist):
+    def raycast(self, offset: b2Vec2, direction: b2Vec2, max_dist):
         class Query(Box2D.b2RayCastCallback):
             def __init__(self, ground):
                 super().__init__()
@@ -539,7 +542,7 @@ class Game:
                 return t
 
         query = Query(self.ground)
-        start: b2Vec2 = self.player.position
+        start: b2Vec2 = self.player.position + offset
         end: b2Vec2 = start + direction * max_dist
         self.world.RayCast(query, start, end)
 
@@ -585,9 +588,11 @@ class Game:
         self.is_jumping = False
 
         if self.mode != Mode.NO_RENDER and self.draw_ray_dirs is not None:
-            self.rays = [
-                self.raycast(d, self.draw_ray_dist) for d in self.draw_ray_dirs
-            ]
+            self.rays = []
+            for d in self.draw_ray_dirs:
+                self.rays.append(
+                    self.raycast(self.draw_ray_offset, d, self.draw_ray_dist)
+                )
 
     def drawInGame(self):
         self.drawObject(self.ground, Settings.GROUND_COLOR)
@@ -601,9 +606,11 @@ class Game:
     def drawRays(self):
         if self.draw_ray_dirs is None:
             return
-        a = self.cam.apply(self.player.position)
+
+        start = self.player.position + self.draw_ray_offset
+        a = self.cam.apply(start)
         for (t, k), d in zip(self.rays, self.draw_ray_dirs):
-            b = self.player.position + t * d * self.draw_ray_dist
+            b = start + t * d * self.draw_ray_dist
             b = self.cam.apply(b)
             if k == -1:
                 col = 0x333333

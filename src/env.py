@@ -18,6 +18,7 @@ class ObservationKind:
         self.resolution = None
         self.max_sight = None
         self.directions = None
+        self.offset = None
 
         self.frame_count: int = 1
         self.include_on_ground = False
@@ -38,12 +39,19 @@ class ObservationKind:
         return s
 
     @staticmethod
-    def raycasts(count=16, spread=math.pi / 2, max_sight=10, **kwargs):
+    def raycasts(
+        count=16,
+        spread=math.pi / 2,
+        offset=b2Vec2(0, 0),
+        max_sight=10,
+        **kwargs,
+    ):
         s = ObservationKind(**kwargs)
         s.kind = ObservationKind.RAYCASTS
         s.resolution = count
         s.max_sight = max_sight
         s.directions = []
+        s.offset = offset
 
         dt = spread / count
         for i in range(count):
@@ -64,18 +72,19 @@ class ObservationKind:
 
         elif self.kind == ObservationKind.RAYCASTS:
             obj_count = len(Settings.OBJECT_DATA)
+            obs_len = self.resolution
             counts = np.array(
                 [
-                    [obj_count + 2 for _ in range(self.resolution)]
+                    [obj_count + 2 for _ in range(obs_len)]
                     for _ in range(self.frame_count)
                 ]
             )
             starts = np.array(
-                [[-1 for _ in range(self.resolution)] for _ in range(self.frame_count)]
+                [[-1 for _ in range(obs_len)] for _ in range(self.frame_count)]
             )
 
             d = {
-                "dists": gym.spaces.Box(0, 1, (self.frame_count, self.resolution)),
+                "dists": gym.spaces.Box(0, 1, (self.frame_count, obs_len)),
                 "kinds": gym.spaces.MultiDiscrete(counts, start=starts),
             }
 
@@ -98,7 +107,7 @@ class ObservationKind:
             kinds = []
 
             for direction in self.directions:
-                (dist, kind) = game.raycast(direction, self.max_sight)
+                (dist, kind) = game.raycast(self.offset, direction, self.max_sight)
                 dists.append(dist)
                 kinds.append(kind)
 
@@ -142,6 +151,7 @@ class GameEnv(gym.Env):
                 mode=mode,
                 draw_ray_dirs=self.obs_kind.directions,
                 draw_ray_dist=self.obs_kind.max_sight,
+                draw_ray_offset=self.obs_kind.offset,
             )
         else:
             self.game = Game(mode=mode)
@@ -211,15 +221,15 @@ You can tweak the reward function in GameEnv.step.
 """
 
 if __name__ == "__main__":
-    env = GameEnv(render_mode="human", obs_kind=ObservationKind.pixels(frame_count=2))
-
-    from PIL import Image
-
-    obs, _ = env.reset(options={"level": "2.txt"})
+    env = GameEnv(
+        render_mode="human",
+        obs_kind=ObservationKind.raycasts(offset=b2Vec2(0.5, 0)),
+    )
 
     total_rew = 0
     steps = 0
     start = time.perf_counter()
+    obs, _ = env.reset()
 
     while True:
         act = env.action_space.sample()
@@ -229,8 +239,6 @@ if __name__ == "__main__":
 
         if term:
             break
-
-    Image.fromarray(obs["pixels"][0] * 255.0).show()
 
     duration = time.perf_counter() - start
     print(f"died!, reward={total_rew}, fps={steps / duration:.2f}")
