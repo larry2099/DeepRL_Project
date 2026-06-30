@@ -17,5 +17,4 @@ Each script includes an `if __name__ == "__main__"` section to run it individual
 `env.py` has an example of environment setup, and an explanation of all different configuration options.
 `eval.py`, `train.py`: self-explanitory
 
-Weights can be found [here](https://disk.pku.edu.cn/link/ARA04E760298ED4679B508E8C482FCD794)
-
+Weights can be found [here](https://disk.pku.edu.cn/link/AAC11AFAD90E3E42F6959C7459E5D379C9)
