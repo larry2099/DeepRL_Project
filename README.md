@@ -1,2 +1,19 @@
-# DeepRL_Project
-geometry dash
+# Geometry Dash
+
+A repository for the PKU Spring 2026 RL class project.
+
+## Contents
+
+- `src/game.py`: Game simulator implementation
+- `src/env.py`: Gymnasium environment wrapper for the game
+- `src/train.py`: Training scirpt
+- `levels/`: Game level data
+
+## Running
+
+Each script includes an `if __name__ == "__main__"` section to run it individually. 
+`game.py` allows to play the game by hand (`space` to jump, `r` to reset, `e` to open level editor).
+`env.py` has an example of environment setup, and an explanation of all different configuration options.
+`train.py` has the training and evaluation loop.
+
+
